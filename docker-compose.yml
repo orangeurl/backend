@@ -12,7 +12,7 @@ services:
   api:
     environment:
       - APP_PORT=:3000
-      - PUBLIC_HOST=orangeurl.live
+      - PUBLIC_HOST=api.orangeurl.live
       - DOMAIN=https://orangeurl.live
       - API_QUOTA=10
       - DB_ADDR=db:6379
