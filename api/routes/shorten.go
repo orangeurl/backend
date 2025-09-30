@@ -42,18 +42,18 @@ func ShortenURL(c *fiber.Ctx) error {
 	// determine effective quota once (fallback to 10 if unset)
 	quota := os.Getenv("API_QUOTA")
 	if quota == "" {
-		quota = "10"
+		quota = "100"
 	}
 
 	val, err := r2.Get(database.Ctx, c.IP()).Result()
 	if err == redis.Nil {
 		// initialize quota for this IP
-		r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
+		r2.Set(database.Ctx, c.IP(), quota, 1*60*time.Second).Err()
 	} else {
 		valInt, convErr := strconv.Atoi(val)
 		if convErr != nil {
 			// repair bad value by resetting quota
-			r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
+			r2.Set(database.Ctx, c.IP(), quota, 1*60*time.Second).Err()
 		} else if valInt <= 0 {
 			limit, _ := r2.TTL(database.Ctx, c.IP()).Result()
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
@@ -112,8 +112,8 @@ func ShortenURL(c *fiber.Ctx) error {
 		URL:             body.URL,
 		CustomShort:     "",
 		Expiry:          body.Expiry,
-		XRateRemaining:  10,
-		XRateLimitReset: 30,
+		XRateRemaining:  100,
+		XRateLimitReset: 1,
 	}
 
 	// decremented the rateremeaning
