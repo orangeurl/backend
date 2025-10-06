@@ -1,2 +1,3 @@
 api/.env
 data/
+postgres-data/

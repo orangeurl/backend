@@ -1,8 +1,8 @@
-package routes
+package tracking
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/xenonnn4w/short-url/database"
+	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
 type URLMapping struct {
@@ -24,7 +24,7 @@ func GetAllURLs(c *fiber.Ctx) error {
 		})
 	}
 
-	// Convert map to array for better JSON response
+	// Convert map to array for better JSON response // study the make function
 	urls := make([]URLMapping, 0, len(urlMap))
 	for shortID, originalURL := range urlMap {
 		urls = append(urls, URLMapping{

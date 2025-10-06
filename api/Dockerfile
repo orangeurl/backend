@@ -6,7 +6,7 @@ ADD . /build
 
 WORKDIR /build
 
-RUN go build -o main .
+RUN go build -o main ./cmd/server
 
 FROM alpine
 

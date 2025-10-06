@@ -1,0 +1,8 @@
+version: "2"
+sql:
+  - schema: "api/database/schema"
+    queries: "api/database/queries"
+    engine: "postgresql"
+    gen:
+      go:
+        out: "api/internal/database"

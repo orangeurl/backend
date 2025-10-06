@@ -1,0 +1,48 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    environment:
+      - APP_PORT=:3000
+      - PUBLIC_HOST=localhost:3000
+      - DOMAIN=http://localhost
+      - API_QUOTA=100
+      - DB_ADDR=db:6379
+      - DB_PASS=
+      - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+    build: api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    build: db
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: orangeurl_postgres
+    environment:
+      POSTGRES_USER: orangeurl
+      POSTGRES_PASSWORD: orangeurl123
+      POSTGRES_DB: orangeurl
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+ 

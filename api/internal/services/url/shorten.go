@@ -1,4 +1,4 @@
-package routes
+package url
 
 import (
 	"os"
@@ -10,8 +10,8 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/xenonnn4w/short-url/database"
-	"github.com/xenonnn4w/short-url/helpers"
+	"github.com/xenonnn4w/orangeurl/internal/database"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/url"
 )
 
 type request struct {
@@ -29,6 +29,7 @@ type response struct {
 }
 
 func ShortenURL(c *fiber.Ctx) error {
+	// new instance of the request struct
 	body := new(request)
 
 	if err := c.BodyParser(&body); err != nil {
@@ -70,15 +71,18 @@ func ShortenURL(c *fiber.Ctx) error {
 	}
 
 	// checking for domain error
-	if !helpers.RemoveDomainError(body.URL) {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Chodu ho kya"})
+	if !url.RemoveDomainError(body.URL) {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Invalid URL"})
 	}
 
-	// enforce https
+	// enforce https using the http_helpers.go file
+	// TODO: investigate the working of this; misbheaving.
 
-	body.URL = helpers.EnforceHTTP(body.URL)
+	body.URL = url.EnforceHTTP(body.URL)
 
 	// assigning url according to the custom id
+	// TODO: allow all 26+9+26 combination; currently only supporting 26+9
+
 	var id string
 
 	if body.CustomShort == "" {
