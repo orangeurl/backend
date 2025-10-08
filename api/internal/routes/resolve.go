@@ -14,11 +14,37 @@ func ResolveURL(c *fiber.Ctx) error {
 
 	value, err := r.Get(database.Ctx, url).Result()
 	if err == redis.Nil {
-		// Redirect to existing error page
-		return c.Redirect("https://app.orangeurl.live/broken-link", 302)
+		// Return 404 with HTML that redirects to broken-link page
+		c.Status(404)
+		return c.Type("html").SendString(`
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<meta http-equiv="refresh" content="0;url=https://app.orangeurl.live/broken-link">
+				<title>Link Not Found</title>
+			</head>
+			<body>
+				<p>Redirecting to error page...</p>
+				<script>window.location.href='https://app.orangeurl.live/broken-link';</script>
+			</body>
+			</html>
+		`)
 	} else if err != nil {
-		// Redirect to existing error page for database errors too
-		return c.Redirect("https://app.orangeurl.live/broken-link", 302)
+		// Return 500 with HTML that redirects for database errors
+		c.Status(500)
+		return c.Type("html").SendString(`
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<meta http-equiv="refresh" content="0;url=https://app.orangeurl.live/broken-link">
+				<title>Server Error</title>
+			</head>
+			<body>
+				<p>Redirecting to error page...</p>
+				<script>window.location.href='https://app.orangeurl.live/broken-link';</script>
+			</body>
+			</html>
+		`)
 	}
 
 	rInr := database.CreateClient(1)
