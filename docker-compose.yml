@@ -17,8 +17,8 @@ services:
       - API_QUOTA=100
       - DB_ADDR=db:6379
       - DB_PASS=
-      
-    build: api- POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+      - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+    build: api
     ports:
       - "3000:3000"
     depends_on:
