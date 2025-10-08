@@ -12,9 +12,9 @@ services:
   api:
     environment:
       - APP_PORT=:3000
-      - PUBLIC_HOST=localhost:3000
-      - DOMAIN=http://localhost
-      - API_QUOTA=100
+      - PUBLIC_HOST=api.orangeurl.live
+      - DOMAIN=https://orangeurl.live
+      - API_QUOTA=10
       - DB_ADDR=db:6379
       - DB_PASS=
       - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable

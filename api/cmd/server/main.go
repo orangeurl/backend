@@ -37,7 +37,7 @@ func setupRoutes(app *fiber.App) {
 	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)
 
 	// Waitlist route (public - no auth required)
-	app.Post("/api/waitlist", waitlist.JoinWaitlist)
+	app.Post("/api/v1/api/waitlist", waitlist.JoinWaitlist)
 
 	// Test endpoint for debugging (public for now)
 	app.Get("/api/test/users", func(c *fiber.Ctx) error {
