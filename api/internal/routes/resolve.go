@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/xenonnn4w/orangeurl/internal/database"
@@ -14,13 +17,21 @@ func ResolveURL(c *fiber.Ctx) error {
 
 	value, err := r.Get(database.Ctx, url).Result()
 	if err == redis.Nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "short not found in the database",
-		})
+		// Serve HTML page for invalid links
+		html, err := os.ReadFile(filepath.Join("templates", "404.html"))
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "short not found in the database"})
+		}
+		c.Set("Content-Type", "text/html")
+		return c.Status(fiber.StatusNotFound).SendString(string(html))
 	} else if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "cannot connect to database",
-		})
+		// For database connection errors, also serve HTML
+		html, err := os.ReadFile(filepath.Join("templates", "500.html"))
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "cannot connect to database"})
+		}
+		c.Set("Content-Type", "text/html")
+		return c.Status(fiber.StatusInternalServerError).SendString(string(html))
 	}
 
 	rInr := database.CreateClient(1)

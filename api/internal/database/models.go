@@ -61,3 +61,9 @@ type User struct {
 	CreatedAt        sql.NullTime
 	UpdatedAt        sql.NullTime
 }
+
+type Waitlist struct {
+	ID        uuid.UUID
+	Email     string
+	CreatedAt sql.NullTime
+}

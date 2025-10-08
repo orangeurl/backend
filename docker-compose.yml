@@ -12,14 +12,15 @@ services:
   api:
     environment:
       - APP_PORT=:3000
-      - PUBLIC_HOST=api.orangeurl.live
-      - DOMAIN=https://orangeurl.live
-      - API_QUOTA=10
+      - PUBLIC_HOST=localhost:3000
+      - DOMAIN=http://localhost
+      - API_QUOTA=100
       - DB_ADDR=db:6379
       - DB_PASS=
-    build: api
-    expose:
-      - "3000"
+      
+    build: api- POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+    ports:
+      - "3000:3000"
     depends_on:
       - db
     restart: unless-stopped
@@ -31,3 +32,17 @@ services:
     volumes:
       - ./data:/data
     restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: orangeurl_postgres
+    environment:
+      POSTGRES_USER: orangeurl
+      POSTGRES_PASSWORD: orangeurl123
+      POSTGRES_DB: orangeurl
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+ 

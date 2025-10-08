@@ -41,11 +41,17 @@ func ClerkAuthMiddleware() fiber.Handler {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token"})
 		}
 
-		// Get user from database
+		// Get user from database - only allow registered users
 		queries := database.GetQueries()
 		user, err := queries.GetUserByClerkID(c.Context(), claims.Subject)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
+			// User is not registered in our database
+			// This means they signed in but weren't registered via sign-up webhook
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "Access denied",
+				"message": "Please sign up first to access this service",
+				"code":    "USER_NOT_REGISTERED",
+			})
 		}
 
 		// Store user in context
