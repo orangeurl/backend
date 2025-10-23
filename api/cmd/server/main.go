@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 	"github.com/xenonnn4w/orangeurl/internal/database"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/analytics"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/auth"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
@@ -54,6 +55,10 @@ func setupRoutes(app *fiber.App) {
 	api.Use(middleware.RequireAuth()) // Add auth middleware to all /api routes
 
 	api.Get("/urls", tracking.GetAllURLs)
+
+	// Analytics routes
+	api.Get("/analytics", analytics.GetUserAnalytics)
+	api.Get("/analytics/url/:urlId", analytics.GetURLAnalytics)
 
 	api.Get("/dashboard/stats", func(c *fiber.Ctx) error {
 		user, err := middleware.GetUserFromContext(c)
