@@ -406,3 +406,4 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 	return c.JSON(analytics)
 }
 
+

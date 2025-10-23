@@ -18,15 +18,6 @@ func TrackClick(urlID uuid.UUID, ipAddress, userAgent, referer string) error {
 	// Get geolocation
 	country, city := utils.GetLocationFromIPCached(ipAddress)
 
-	// Create database entry
-	queries := database.GetQueries()
-	
-	// Convert empty strings to sql.NullString  
-	var ipAddressInet sql.NullString
-	if ipAddress != "" {
-		ipAddressInet = sql.NullString{String: ipAddress, Valid: true}
-	}
-
 	var userAgentNull sql.NullString
 	if userAgent != "" {
 		userAgentNull = sql.NullString{String: userAgent, Valid: true}

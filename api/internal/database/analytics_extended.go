@@ -467,3 +467,4 @@ func (q *Queries) DeleteOldClicksByDate(ctx context.Context, arg DeleteOldClicks
 	return err
 }
 
+
