@@ -118,11 +118,18 @@ func ShortenURL(c *fiber.Ctx) error {
 	
 	// Get user from context (if authenticated)
 	userID := c.Locals("user_id")
+	fmt.Printf("🔍 [URL] User ID from context: %+v (type: %T)\n", userID, userID)
+	
 	var userUUID *uuid.UUID
 	if userID != nil {
 		if uid, ok := userID.(uuid.UUID); ok {
 			userUUID = &uid
+			fmt.Printf("✅ [URL] Using authenticated user: %s\n", uid.String())
+		} else {
+			fmt.Printf("❌ [URL] User ID type assertion failed\n")
 		}
+	} else {
+		fmt.Printf("❌ [URL] No user ID in context\n")
 	}
 	
 	// If no authenticated user, use system user for anonymous links
