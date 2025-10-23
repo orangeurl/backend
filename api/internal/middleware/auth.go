@@ -76,6 +76,11 @@ func ClerkAuthMiddleware() fiber.Handler {
 		c.Locals("user", user)
 		c.Locals("user_id", user.ID)
 		c.Locals("clerk_id", user.ClerkID)
+		
+		// Debug: Check what was stored
+		storedUser := c.Locals("user")
+		fmt.Printf("🔍 [Auth] Stored user in context: %+v\n", storedUser)
+		fmt.Printf("🔍 [Auth] User type: %T\n", storedUser)
 
 		return c.Next()
 	}
@@ -225,9 +230,21 @@ func RequireAuth() fiber.Handler {
 
 // Helper function to get user from context
 func GetUserFromContext(c *fiber.Ctx) (*database.User, error) {
-	user, ok := c.Locals("user").(*database.User)
-	if !ok {
-		return nil, fmt.Errorf("user not found in context")
+	fmt.Printf("🔍 [GetUserFromContext] Attempting to get user from context\n")
+	
+	userInterface := c.Locals("user")
+	fmt.Printf("🔍 [GetUserFromContext] Raw user from context: %+v\n", userInterface)
+	fmt.Printf("🔍 [GetUserFromContext] User type: %T\n", userInterface)
+	
+	if userInterface == nil {
+		return nil, fmt.Errorf("user not found in context (nil)")
 	}
+	
+	user, ok := userInterface.(*database.User)
+	if !ok {
+		return nil, fmt.Errorf("user not found in context (type assertion failed)")
+	}
+	
+	fmt.Printf("✅ [GetUserFromContext] User retrieved successfully: %s\n", user.Email)
 	return user, nil
 }
