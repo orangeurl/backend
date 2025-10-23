@@ -125,10 +125,26 @@ func ShortenURL(c *fiber.Ctx) error {
 		}
 	}
 	
-	// If no user, create a temporary user ID for anonymous links
+	// If no authenticated user, use system user for anonymous links
 	if userUUID == nil {
-		tempID := uuid.New()
-		userUUID = &tempID
+		// Create or get system user for anonymous links
+		systemUser, err := queries.GetUserByClerkID(database.Ctx, "system_anonymous")
+		if err != nil {
+			// Create system user if it doesn't exist
+			systemUser, err = queries.CreateUser(database.Ctx, database.CreateUserParams{
+				ClerkID:         "system_anonymous",
+				Email:           "anonymous@orangeurl.live",
+				FirstName:       "Anonymous",
+				LastName:        "User",
+				SubscriptionTier: "free",
+			})
+			if err != nil {
+				fmt.Printf("❌ [URL] Failed to create system user: %v\n", err)
+				r.Del(database.Ctx, id)
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to create system user"})
+			}
+		}
+		userUUID = &systemUser.ID
 	}
 	
 	// Calculate expiry time
