@@ -72,8 +72,8 @@ func ClerkAuthMiddleware() fiber.Handler {
 
 		fmt.Printf("✅ [Auth] User found: %s (%s)\n", user.Email, user.ID)
 
-		// Store user in context
-		c.Locals("user", user)
+		// Store user in context (store as pointer to match expected type)
+		c.Locals("user", &user)
 		c.Locals("user_id", user.ID)
 		c.Locals("clerk_id", user.ClerkID)
 		
