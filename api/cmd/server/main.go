@@ -32,7 +32,6 @@ func setupRoutes(app *fiber.App) {
 
 	// Public routes
 	app.Get("/:url", routes.ResolveURL)
-	app.Post("/api/v1", url.ShortenURL)
 
 	// Webhook routes (public - no auth required)
 	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)
@@ -54,6 +53,8 @@ func setupRoutes(app *fiber.App) {
 	api := app.Group("/api")
 	api.Use(middleware.RequireAuth()) // Add auth middleware to all /api routes
 
+	// URL creation (now requires authentication)
+	api.Post("/v1", url.ShortenURL)
 	api.Get("/urls", tracking.GetAllURLs)
 
 	// Analytics routes
