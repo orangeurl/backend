@@ -2,6 +2,7 @@ package url
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -138,6 +139,8 @@ func ShortenURL(c *fiber.Ctx) error {
 	}
 	
 	// Store in PostgreSQL
+	fmt.Printf("🔗 [URL] Storing in PostgreSQL: UserID=%s, ShortID=%s, URL=%s\n", userUUID.String(), id, body.URL)
+	
 	_, err = queries.CreateURL(database.Ctx, database.CreateURLParams{
 		UserID:      *userUUID,
 		ShortID:     id,
@@ -147,10 +150,13 @@ func ShortenURL(c *fiber.Ctx) error {
 	})
 	
 	if err != nil {
+		fmt.Printf("❌ [URL] PostgreSQL insert failed: %v\n", err)
 		// If PostgreSQL fails, remove from Redis to maintain consistency
 		r.Del(database.Ctx, id)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to save URL to database"})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to save URL to database", "details": err.Error()})
 	}
+	
+	fmt.Printf("✅ [URL] Successfully stored in PostgreSQL\n")
 
 	resp := response{
 		URL:             body.URL,
