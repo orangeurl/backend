@@ -18,6 +18,9 @@ services:
       - DB_ADDR=db:6379
       - DB_PASS=
       - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+      - CLERK_DOMAIN=${CLERK_DOMAIN}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
     build: api
     ports:
       - "3000:3000"
