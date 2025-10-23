@@ -33,32 +33,44 @@ func ClerkAuthMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
+			fmt.Println("❌ [Auth] No Authorization header")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Authorization header required"})
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == authHeader {
+			fmt.Println("❌ [Auth] No Bearer prefix in token")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Bearer token required"})
 		}
+
+		fmt.Printf("🔐 [Auth] Token received (length: %d)\n", len(tokenString))
 
 		// Verify JWT token
 		claims, err := verifyClerkJWT(tokenString)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token"})
+			fmt.Printf("❌ [Auth] Token verification failed: %v\n", err)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid token",
+				"details": err.Error(),
+			})
 		}
+
+		fmt.Printf("✅ [Auth] Token verified for subject: %s\n", claims.Subject)
 
 		// Get user from database - only allow registered users
 		queries := database.GetQueries()
 		user, err := queries.GetUserByClerkID(c.Context(), claims.Subject)
 		if err != nil {
 			// User is not registered in our database
-			// This means they signed in but weren't registered via sign-up webhook
+			fmt.Printf("❌ [Auth] User not found in database: %s\n", claims.Subject)
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error":   "Access denied",
 				"message": "Please sign up first to access this service",
 				"code":    "USER_NOT_REGISTERED",
 			})
 		}
+
+		fmt.Printf("✅ [Auth] User found: %s (%s)\n", user.Email, user.ID)
 
 		// Store user in context
 		c.Locals("user", user)
@@ -115,30 +127,41 @@ func getClerkPublicKey(kid string) (*rsa.PublicKey, error) {
 	// Refresh JWKS cache if older than 1 hour or not cached
 	if jwksCache == nil || time.Since(jwksCacheTime) > time.Hour {
 		clerkDomain := os.Getenv("CLERK_DOMAIN")
+		fmt.Printf("🔑 [Auth] CLERK_DOMAIN from env: %s\n", clerkDomain)
+		
 		if clerkDomain == "" {
 			// Try to get from publishable key
 			publishableKey := os.Getenv("CLERK_PUBLISHABLE_KEY")
 			if publishableKey == "" {
 				publishableKey = os.Getenv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY")
 			}
+			fmt.Printf("🔑 [Auth] CLERK_PUBLISHABLE_KEY from env: %s\n", publishableKey)
+			
 			if publishableKey != "" {
 				// Extract domain from publishable key (format: pk_test_xxxxx or pk_live_xxxxx)
 				// For Clerk, the JWKS endpoint is at the instance domain
-				clerkDomain = "https://clerk." + extractClerkDomain(publishableKey)
-			} else {
-				return nil, fmt.Errorf("CLERK_DOMAIN or CLERK_PUBLISHABLE_KEY not set")
+				extracted := extractClerkDomain(publishableKey)
+				if extracted != "" {
+					clerkDomain = "https://clerk." + extracted
+				}
+			}
+			
+			if clerkDomain == "" {
+				return nil, fmt.Errorf("CLERK_DOMAIN not set in environment variables")
 			}
 		}
 
 		jwksURL := clerkDomain + "/.well-known/jwks.json"
+		fmt.Printf("🌐 [Auth] Fetching JWKS from: %s\n", jwksURL)
+		
 		resp, err := http.Get(jwksURL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
+			return nil, fmt.Errorf("failed to fetch JWKS from %s: %w", jwksURL, err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+			return nil, fmt.Errorf("JWKS endpoint %s returned status %d", jwksURL, resp.StatusCode)
 		}
 
 		var jwks ClerkJWKS
@@ -146,18 +169,23 @@ func getClerkPublicKey(kid string) (*rsa.PublicKey, error) {
 			return nil, fmt.Errorf("failed to decode JWKS: %w", err)
 		}
 
+		fmt.Printf("✅ [Auth] JWKS fetched successfully, %d keys found\n", len(jwks.Keys))
 		jwksCache = &jwks
 		jwksCacheTime = time.Now()
+	} else {
+		fmt.Printf("♻️  [Auth] Using cached JWKS (%d keys)\n", len(jwksCache.Keys))
 	}
 
 	// Find the key with matching kid
+	fmt.Printf("🔍 [Auth] Looking for key with kid: %s\n", kid)
 	for _, key := range jwksCache.Keys {
 		if key.Kid == kid {
+			fmt.Printf("✅ [Auth] Found matching key\n")
 			return jwkToRSAPublicKey(key)
 		}
 	}
 
-	return nil, fmt.Errorf("key with kid %s not found", kid)
+	return nil, fmt.Errorf("key with kid %s not found in JWKS", kid)
 }
 
 func jwkToRSAPublicKey(jwk ClerkJWK) (*rsa.PublicKey, error) {
@@ -184,10 +212,11 @@ func jwkToRSAPublicKey(jwk ClerkJWK) (*rsa.PublicKey, error) {
 }
 
 func extractClerkDomain(publishableKey string) string {
-	// This is a simplified version - in production, you should parse the actual Clerk domain
-	// For now, return a default or extract from your Clerk dashboard
-	// You might need to set CLERK_FRONTEND_API or similar
-	return "accounts.example.com" // REPLACE with your actual Clerk domain
+	// Extract the instance from publishable key
+	// Format: pk_test_xxx or pk_live_xxx
+	// We can't reliably extract domain from the key alone
+	// So we should use the CLERK_DOMAIN env var
+	return ""
 }
 
 func RequireAuth() fiber.Handler {
