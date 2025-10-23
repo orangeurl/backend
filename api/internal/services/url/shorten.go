@@ -105,11 +105,50 @@ func ShortenURL(c *fiber.Ctx) error {
 		body.Expiry = 24
 	}
 
-	//doubt regarding the time
+	// Store in Redis
 	err = r.Set(database.Ctx, id, body.URL, body.Expiry*3600*time.Second).Err()
-
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to connect to server"})
+	}
+
+	// Also store in PostgreSQL for analytics and persistence
+	queries := database.GetQueries()
+	
+	// Get user from context (if authenticated)
+	userID := c.Locals("user_id")
+	var userUUID *uuid.UUID
+	if userID != nil {
+		if uid, ok := userID.(uuid.UUID); ok {
+			userUUID = &uid
+		}
+	}
+	
+	// If no user, create a temporary user ID for anonymous links
+	if userUUID == nil {
+		tempID := uuid.New()
+		userUUID = &tempID
+	}
+	
+	// Calculate expiry time
+	var expiryTime *time.Time
+	if body.Expiry > 0 {
+		exp := time.Now().Add(time.Duration(body.Expiry) * time.Hour)
+		expiryTime = &exp
+	}
+	
+	// Store in PostgreSQL
+	_, err = queries.CreateURL(database.Ctx, database.CreateURLParams{
+		UserID:      *userUUID,
+		ShortID:     id,
+		OriginalUrl: body.URL,
+		Expiry:      expiryTime,
+		IsActive:    true,
+	})
+	
+	if err != nil {
+		// If PostgreSQL fails, remove from Redis to maintain consistency
+		r.Del(database.Ctx, id)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to save URL to database"})
 	}
 
 	resp := response{
