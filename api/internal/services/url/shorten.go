@@ -132,11 +132,11 @@ func ShortenURL(c *fiber.Ctx) error {
 		if err != nil {
 			// Create system user if it doesn't exist
 			systemUser, err = queries.CreateUser(database.Ctx, database.CreateUserParams{
-				ClerkID:         "system_anonymous",
-				Email:           "anonymous@orangeurl.live",
-				FirstName:       "Anonymous",
-				LastName:        "User",
-				SubscriptionTier: "free",
+				ClerkID:   "system_anonymous",
+				Email:     "anonymous@orangeurl.live",
+				FirstName: "Anonymous",
+				LastName:  "User",
+				AvatarUrl: sql.NullString{String: "", Valid: false},
 			})
 			if err != nil {
 				fmt.Printf("❌ [URL] Failed to create system user: %v\n", err)
