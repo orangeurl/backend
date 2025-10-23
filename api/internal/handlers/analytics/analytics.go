@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -74,10 +75,15 @@ type ReferrerData struct {
 
 // GetUserAnalytics returns analytics for the authenticated user based on their tier
 func GetUserAnalytics(c *fiber.Ctx) error {
+	fmt.Println("📊 [Analytics] GetUserAnalytics handler called")
+	
 	user, err := middleware.GetUserFromContext(c)
 	if err != nil {
-		return c.Status(401).JSON(fiber.Map{"error": "Unauthorized"})
+		fmt.Printf("❌ [Analytics] Failed to get user from context: %v\n", err)
+		return c.Status(401).JSON(fiber.Map{"error": "Unauthorized", "details": err.Error()})
 	}
+	
+	fmt.Printf("✅ [Analytics] User retrieved: %s (%s)\n", user.Email, user.ID)
 
 	// Check cache first
 	cachedData, err := database.GetCachedUserAnalytics(user.ID)
