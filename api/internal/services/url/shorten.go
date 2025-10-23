@@ -1,6 +1,7 @@
 package url
 
 import (
+	"database/sql"
 	"os"
 	"strconv"
 	"strings"
@@ -141,8 +142,8 @@ func ShortenURL(c *fiber.Ctx) error {
 		UserID:      *userUUID,
 		ShortID:     id,
 		OriginalUrl: body.URL,
-		Expiry:      expiryTime,
-		IsActive:    true,
+		Expiry:      sql.NullTime{Time: *expiryTime, Valid: expiryTime != nil},
+		IsActive:    sql.NullBool{Bool: true, Valid: true},
 	})
 	
 	if err != nil {
