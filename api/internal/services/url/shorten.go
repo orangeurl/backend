@@ -17,9 +17,10 @@ import (
 )
 
 type request struct {
-	URL         string        `json:"url"`
-	CustomShort string        `json:"short"`
-	Expiry      time.Duration `json:"expiry"`
+	URL          string        `json:"url"`
+	CustomShort  string        `json:"short"`
+	Expiry       time.Duration `json:"expiry"`
+	CustomExpiry *time.Time    `json:"custom_expiry"` // Premium feature - specific expiry date
 }
 
 type response struct {
@@ -123,9 +124,42 @@ func ShortenURL(c *fiber.Ctx) error {
 		if queries == nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "database not initialized"})
 		}
+
+		// Check monthly usage limit
+		currentMonth := time.Now().Format("2006-01")
+		usage, _ := queries.GetMonthlyUsage(c.Context(), database.GetMonthlyUsageParams{
+			UserID: user.ID,
+			Month:  currentMonth,
+		})
+
+		// Get user's tier to determine limit
+		subscription, _ := queries.GetUserSubscription(c.Context(), user.ID)
+		tierLimit := 5 // Free tier default
+		if subscription.PlanID == "pro" {
+			tierLimit = 100
+		} else if subscription.PlanID == "premium" {
+			tierLimit = 500
+		}
+
+		// Check if user has exceeded monthly limit
+		if usage.UrlCount >= int32(tierLimit) {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "Monthly limit reached",
+				"message": "You've reached your monthly URL limit. Upgrade your plan for more links.",
+				"limit":   tierLimit,
+				"used":    usage.UrlCount,
+			})
+		}
 		
 		var expiryTime sql.NullTime
-		if body.Expiry > 0 {
+		
+		// Check if user is Premium and has custom expiry
+		if body.CustomExpiry != nil && subscription.PlanID == "premium" {
+			expiryTime = sql.NullTime{
+				Time:  *body.CustomExpiry,
+				Valid: true,
+			}
+		} else if body.Expiry > 0 {
 			expiryTime = sql.NullTime{
 				Time:  time.Now().Add(body.Expiry * time.Hour),
 				Valid: true,
@@ -146,6 +180,12 @@ func ShortenURL(c *fiber.Ctx) error {
 				"details": pgErr.Error(),
 			})
 		}
+
+		// Increment monthly usage counter
+		_, _ = queries.IncrementURLCount(c.Context(), database.IncrementURLCountParams{
+			UserID: user.ID,
+			Month:  currentMonth,
+		})
 	}
 	// If user is not authenticated, URL only stored in Redis (existing behavior for anonymous users)
 

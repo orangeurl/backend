@@ -11,6 +11,17 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type MonthlyUsage struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Month           string
+	UrlCount        int32
+	CustomLinkCount int32
+	QrCodeCount     int32
+	CreatedAt       sql.NullTime
+	UpdatedAt       sql.NullTime
+}
+
 type Subscription struct {
 	ID                         uuid.UUID
 	UserID                     uuid.UUID
