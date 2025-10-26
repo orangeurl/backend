@@ -72,17 +72,17 @@ func ClerkAuthMiddleware() fiber.Handler {
 
 		log.Printf("[Auth] User found in DB: ID=%s, Email=%s", user.ID, user.Email)
 
-		// Store user in context
-		c.Locals("user", user)
+		// Store user in context - use pointer to ensure it persists
+		c.Locals("user", &user)
 		c.Locals("user_id", user.ID)
 		c.Locals("clerk_id", user.ClerkID)
 
-		log.Printf("[Auth] User stored in context, calling Next()")
+		log.Printf("[Auth] User stored in context (pointer): %p, calling Next()", &user)
 		
-		err = c.Next()
+		result := c.Next()
 		
-		log.Printf("[Auth] Next() returned, err=%v", err)
-		return err
+		log.Printf("[Auth] Next() completed, result=%v", result)
+		return result
 	}
 }
 
@@ -127,9 +127,23 @@ func RequireAuth() fiber.Handler {
 
 // Helper function to get user from context
 func GetUserFromContext(c *fiber.Ctx) (*database.User, error) {
-	user, ok := c.Locals("user").(*database.User)
-	if !ok {
+	log.Printf("[GetUserFromContext] Attempting to get user from context...")
+	
+	userVal := c.Locals("user")
+	log.Printf("[GetUserFromContext] c.Locals('user') returned: %v (type: %T)", userVal, userVal)
+	
+	if userVal == nil {
+		log.Println("[GetUserFromContext] user is nil in context")
 		return nil, fmt.Errorf("user not found in context")
 	}
+	
+	user, ok := userVal.(*database.User)
+	if !ok {
+		log.Printf("[GetUserFromContext] Type assertion failed, got type: %T", userVal)
+		return nil, fmt.Errorf("user not found in context - type assertion failed")
+	}
+	
+	log.Printf("[GetUserFromContext] Successfully retrieved user: ID=%s", user.ID)
 	return user, nil
 }
+
