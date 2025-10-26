@@ -70,14 +70,19 @@ func ClerkAuthMiddleware() fiber.Handler {
 			})
 		}
 
-		log.Printf("[Auth] User authenticated: ID=%s, Email=%s", user.ID, user.Email)
+		log.Printf("[Auth] User found in DB: ID=%s, Email=%s", user.ID, user.Email)
 
 		// Store user in context
 		c.Locals("user", user)
 		c.Locals("user_id", user.ID)
 		c.Locals("clerk_id", user.ClerkID)
 
-		return c.Next()
+		log.Printf("[Auth] User stored in context, calling Next()")
+		
+		err = c.Next()
+		
+		log.Printf("[Auth] Next() returned, err=%v", err)
+		return err
 	}
 }
 
