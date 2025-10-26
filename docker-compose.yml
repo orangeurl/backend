@@ -18,11 +18,15 @@ services:
       - DB_ADDR=db:6379
       - DB_PASS=
       - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+      - DATABASE_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
     build: api
     ports:
       - "3000:3000"
     depends_on:
-      - db
+      postgres:
+        condition: service_healthy
+      db:
+        condition: service_started
     restart: unless-stopped
 
   db:
@@ -44,5 +48,10 @@ services:
       - "5432:5432"
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orangeurl"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
  
