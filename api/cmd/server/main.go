@@ -53,18 +53,17 @@ func setupRoutes(app *fiber.App) {
 
 	// Protected routes
 	api := app.Group("/api")
-	api.Use(middleware.RequireAuth()) // Add auth middleware to all /api routes
+	
+	// Dashboard routes (with auth)
+	api.Get("/dashboard/stats", middleware.RequireAuth(), dashboard.GetDashboardStats)
+	api.Get("/dashboard/urls/:shortId/analytics", middleware.RequireAuth(), dashboard.GetURLAnalytics)
 
-	// Dashboard routes
-	api.Get("/dashboard/stats", dashboard.GetDashboardStats)
-	api.Get("/dashboard/urls/:shortId/analytics", dashboard.GetURLAnalytics)
+	// Analytics routes (with auth)
+	api.Get("/analytics", middleware.RequireAuth(), analytics.GetUserAnalytics)
+	api.Get("/analytics/urls", middleware.RequireAuth(), analytics.GetAllUserURLs)
 
-	// Analytics routes
-	api.Get("/analytics", analytics.GetUserAnalytics)
-	api.Get("/analytics/urls", analytics.GetAllUserURLs)
-
-	// URL management routes
-	api.Get("/urls", tracking.GetAllURLs)
+	// URL management routes (with auth)
+	api.Get("/urls", middleware.RequireAuth(), tracking.GetAllURLs)
 }
 
 func main() {
