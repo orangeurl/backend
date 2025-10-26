@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -77,49 +78,76 @@ type TierFeatures struct {
 
 // GetDashboardStats returns comprehensive dashboard statistics based on user's tier
 func GetDashboardStats(c *fiber.Ctx) error {
+	log.Println("[Dashboard] GetDashboardStats called")
+	
 	user, err := middleware.GetUserFromContext(c)
 	if err != nil {
+		log.Printf("[Dashboard] Failed to get user from context: %v", err)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
 	}
 
+	log.Printf("[Dashboard] User found: ID=%s, Email=%s", user.ID, user.Email)
 	queries := database.GetQueries()
+	if queries == nil {
+		log.Println("[Dashboard] ERROR: queries is nil - database not initialized")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database not initialized"})
+	}
 
 	// Get user's subscription to determine tier
 	subscription, subErr := queries.GetUserSubscription(c.Context(), user.ID)
 	planTier := "free"
 	if subErr == nil && subscription.PlanID != "" {
 		planTier = subscription.PlanID
+		log.Printf("[Dashboard] Subscription found: plan=%s", planTier)
+	} else {
+		log.Printf("[Dashboard] No subscription found or error: %v - defaulting to free", subErr)
 	}
 
 	// Get URL count
+	log.Println("[Dashboard] Fetching URL count...")
 	urlCount, err := queries.GetUserURLCount(c.Context(), user.ID)
 	if err != nil {
+		log.Printf("[Dashboard] Error getting URL count: %v", err)
 		urlCount = 0
+	} else {
+		log.Printf("[Dashboard] URL count: %d", urlCount)
 	}
 
 	// Get click stats
+	log.Println("[Dashboard] Fetching click stats...")
 	clickStats, err := queries.GetUserClickStats(c.Context(), user.ID)
 	totalClicks := int64(0)
 	if err == nil {
 		totalClicks = clickStats.TotalClicks
+		log.Printf("[Dashboard] Total clicks: %d", totalClicks)
+	} else {
+		log.Printf("[Dashboard] Error getting click stats: %v", err)
 	}
 
 	// Get top countries
-	countries, _ := queries.GetUserClicksByCountry(c.Context(), user.ID)
+	log.Println("[Dashboard] Fetching top countries...")
+	countries, err := queries.GetUserClicksByCountry(c.Context(), user.ID)
 	topCountries := make([]CountryStats, 0)
-	for _, c := range countries {
-		if c.Country.Valid {
-			topCountries = append(topCountries, CountryStats{
-				Country: c.Country.String,
-				Clicks:  c.Clicks,
-			})
+	if err != nil {
+		log.Printf("[Dashboard] Error getting countries: %v", err)
+	} else {
+		for _, country := range countries {
+			if country.Country.Valid {
+				topCountries = append(topCountries, CountryStats{
+					Country: country.Country.String,
+					Clicks:  country.Clicks,
+				})
+			}
 		}
+		log.Printf("[Dashboard] Found %d countries", len(topCountries))
 	}
 
 	// Get recent URLs with stats
+	log.Println("[Dashboard] Fetching recent URLs...")
 	recentURLs := make([]URLWithStats, 0)
 	urls, err := queries.GetUserURLs(c.Context(), user.ID)
 	if err == nil {
+		log.Printf("[Dashboard] Found %d URLs", len(urls))
 		for _, url := range urls {
 			// Get click count for this URL
 			clicks, _ := queries.GetURLAnalytics(c.Context(), url.ID)
@@ -134,6 +162,8 @@ func GetDashboardStats(c *fiber.Ctx) error {
 				break
 			}
 		}
+	} else {
+		log.Printf("[Dashboard] Error getting URLs: %v", err)
 	}
 
 	// Determine tier features and limits
@@ -159,6 +189,7 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		Features:        features,
 	}
 
+	log.Printf("[Dashboard] Returning stats: URLs=%d, Clicks=%d, Plan=%s", urlCount, totalClicks, planTier)
 	return c.JSON(stats)
 }
 

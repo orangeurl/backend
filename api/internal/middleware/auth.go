@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -25,26 +26,41 @@ type ClerkJWK struct {
 
 func ClerkAuthMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		log.Printf("[Auth] Request to: %s", c.Path())
+		
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
+			log.Println("[Auth] No Authorization header")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Authorization header required"})
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == authHeader {
+			log.Println("[Auth] Missing Bearer prefix")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Bearer token required"})
 		}
 
+		log.Println("[Auth] Token found, verifying...")
+		
 		// Verify JWT token
 		claims, err := verifyClerkJWT(tokenString)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token"})
+			log.Printf("[Auth] Token verification failed: %v", err)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token", "details": err.Error()})
 		}
+
+		log.Printf("[Auth] Token verified, Clerk ID: %s", claims.Subject)
 
 		// Get user from database - only allow registered users
 		queries := database.GetQueries()
+		if queries == nil {
+			log.Println("[Auth] ERROR: Database queries is nil")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database not initialized"})
+		}
+
 		user, err := queries.GetUserByClerkID(c.Context(), claims.Subject)
 		if err != nil {
+			log.Printf("[Auth] User not found in database: clerk_id=%s, error=%v", claims.Subject, err)
 			// User is not registered in our database
 			// This means they signed in but weren't registered via sign-up webhook
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -53,6 +69,8 @@ func ClerkAuthMiddleware() fiber.Handler {
 				"code":    "USER_NOT_REGISTERED",
 			})
 		}
+
+		log.Printf("[Auth] User authenticated: ID=%s, Email=%s", user.ID, user.Email)
 
 		// Store user in context
 		c.Locals("user", user)
