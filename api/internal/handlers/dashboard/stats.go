@@ -63,6 +63,7 @@ type DeviceStats struct {
 }
 
 type URLWithStats struct {
+	ID          string    `json:"id"`
 	ShortID     string    `json:"short_id"`
 	OriginalURL string    `json:"original_url"`
 	Clicks      int64     `json:"clicks"`
@@ -210,6 +211,7 @@ func GetDashboardStats(c *fiber.Ctx) error {
 			// Get click count for this URL
 			clicks, _ := queries.GetURLAnalytics(c.Context(), url.ID)
 			recentURLs = append(recentURLs, URLWithStats{
+				ID:          url.ID.String(),
 				ShortID:     url.ShortID,
 				OriginalURL: url.OriginalUrl,
 				Clicks:      int64(len(clicks)),

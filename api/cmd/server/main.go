@@ -14,11 +14,12 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/analytics"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/auth"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/dashboard"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 	"github.com/xenonnn4w/orangeurl/internal/routes"
 	"github.com/xenonnn4w/orangeurl/internal/services/tracking"
-	"github.com/xenonnn4w/orangeurl/internal/services/url"
+	urlService "github.com/xenonnn4w/orangeurl/internal/services/url"
 )
 
 func setupRoutes(app *fiber.App) {
@@ -34,7 +35,7 @@ func setupRoutes(app *fiber.App) {
 	// Public routes
 	app.Get("/:url", routes.ResolveURL)
 	// URL shortening with optional auth (saves to user account if authenticated)
-	app.Post("/api/v1", middleware.OptionalAuth(), url.ShortenURL)
+	app.Post("/api/v1", middleware.OptionalAuth(), urlService.ShortenURL)
 
 	// Webhook routes (public - no auth required)
 	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)
@@ -65,6 +66,8 @@ func setupRoutes(app *fiber.App) {
 
 	// URL management routes (with auth)
 	api.Get("/urls", middleware.RequireAuth(), tracking.GetAllURLs)
+	api.Delete("/urls/:id", middleware.RequireAuth(), urls.DeleteURL)
+	api.Put("/urls/:id/toggle", middleware.RequireAuth(), urls.ToggleURLStatus)
 }
 
 func main() {
