@@ -101,13 +101,20 @@ func GetDashboardStats(c *fiber.Ctx) error {
 	}
 
 	// Get user's subscription to determine tier
+	// Check both subscriptions table and user.subscription_tier as fallback
 	subscription, subErr := queries.GetUserSubscription(c.Context(), user.ID)
-	planTier := "free"
+	planTier := user.SubscriptionTier // Use user table tier as default
+	
+	if planTier == "" {
+		planTier = "free"
+	}
+	
+	// Subscription table overrides user table if exists
 	if subErr == nil && subscription.PlanID != "" {
 		planTier = subscription.PlanID
 		log.Printf("[Dashboard] Subscription found: plan=%s", planTier)
 	} else {
-		log.Printf("[Dashboard] No subscription found or error: %v - defaulting to free", subErr)
+		log.Printf("[Dashboard] No subscription found (error: %v) - using user.subscription_tier: %s", subErr, planTier)
 	}
 
 	// Get URL count

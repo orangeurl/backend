@@ -133,11 +133,22 @@ func ShortenURL(c *fiber.Ctx) error {
 		})
 
 		// Get user's tier to determine limit
-		subscription, _ := queries.GetUserSubscription(c.Context(), user.ID)
+		// Check user.subscription_tier first, then subscriptions table
+		tier := user.SubscriptionTier
+		if tier == "" {
+			tier = "free"
+		}
+		
+		// Override with subscriptions table if available
+		subscription, subErr := queries.GetUserSubscription(c.Context(), user.ID)
+		if subErr == nil && subscription.PlanID != "" {
+			tier = subscription.PlanID
+		}
+		
 		tierLimit := 5 // Free tier default
-		if subscription.PlanID == "pro" {
+		if tier == "pro" {
 			tierLimit = 100
-		} else if subscription.PlanID == "premium" {
+		} else if tier == "premium" {
 			tierLimit = 500
 		}
 
@@ -154,7 +165,7 @@ func ShortenURL(c *fiber.Ctx) error {
 		var expiryTime sql.NullTime
 		
 		// Check if user is Premium and has custom expiry
-		if body.CustomExpiry != nil && subscription.PlanID == "premium" {
+		if body.CustomExpiry != nil && tier == "premium" {
 			expiryTime = sql.NullTime{
 				Time:  *body.CustomExpiry,
 				Valid: true,
