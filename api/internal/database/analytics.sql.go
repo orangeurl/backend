@@ -292,6 +292,46 @@ func (q *Queries) GetUserClickStats(ctx context.Context, userID uuid.UUID) (GetU
 	return i, err
 }
 
+const getUserClicksByBrowser = `-- name: GetUserClicksByBrowser :many
+SELECT 
+    browser,
+    COUNT(*) as clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.browser IS NOT NULL
+GROUP BY browser
+ORDER BY clicks DESC
+LIMIT 10
+`
+
+type GetUserClicksByBrowserRow struct {
+	Browser sql.NullString
+	Clicks  int64
+}
+
+func (q *Queries) GetUserClicksByBrowser(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByBrowserRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByBrowser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByBrowserRow
+	for rows.Next() {
+		var i GetUserClicksByBrowserRow
+		if err := rows.Scan(&i.Browser, &i.Clicks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserClicksByCountry = `-- name: GetUserClicksByCountry :many
 SELECT 
     country,
@@ -319,6 +359,85 @@ func (q *Queries) GetUserClicksByCountry(ctx context.Context, userID uuid.UUID) 
 	for rows.Next() {
 		var i GetUserClicksByCountryRow
 		if err := rows.Scan(&i.Country, &i.Clicks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserClicksByDate = `-- name: GetUserClicksByDate :many
+SELECT 
+    DATE(clicked_at) as date,
+    COUNT(*) as clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+GROUP BY DATE(clicked_at)
+ORDER BY date DESC
+LIMIT 30
+`
+
+type GetUserClicksByDateRow struct {
+	Date   time.Time
+	Clicks int64
+}
+
+func (q *Queries) GetUserClicksByDate(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByDateRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByDate, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByDateRow
+	for rows.Next() {
+		var i GetUserClicksByDateRow
+		if err := rows.Scan(&i.Date, &i.Clicks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserClicksByDevice = `-- name: GetUserClicksByDevice :many
+SELECT 
+    device_type,
+    COUNT(*) as clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.device_type IS NOT NULL
+GROUP BY device_type
+ORDER BY clicks DESC
+`
+
+type GetUserClicksByDeviceRow struct {
+	DeviceType sql.NullString
+	Clicks     int64
+}
+
+func (q *Queries) GetUserClicksByDevice(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByDeviceRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByDevice, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByDeviceRow
+	for rows.Next() {
+		var i GetUserClicksByDeviceRow
+		if err := rows.Scan(&i.DeviceType, &i.Clicks); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

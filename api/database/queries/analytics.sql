@@ -60,3 +60,35 @@ FROM url_clicks
 WHERE url_id = $1 AND device_type IS NOT NULL
 GROUP BY device_type
 ORDER BY clicks DESC;
+
+-- name: GetUserClicksByDate :many
+SELECT 
+    DATE(clicked_at) as date,
+    COUNT(*) as clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+GROUP BY DATE(clicked_at)
+ORDER BY date DESC
+LIMIT 30;
+
+-- name: GetUserClicksByBrowser :many
+SELECT 
+    browser,
+    COUNT(*) as clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.browser IS NOT NULL
+GROUP BY browser
+ORDER BY clicks DESC
+LIMIT 10;
+
+-- name: GetUserClicksByDevice :many
+SELECT 
+    device_type,
+    COUNT(*) as clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.device_type IS NOT NULL
+GROUP BY device_type
+ORDER BY clicks DESC;

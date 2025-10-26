@@ -35,10 +35,16 @@ type DashboardStats struct {
 	TopCountries     []CountryStats    `json:"top_countries"`
 	BrowserStats     []BrowserStats    `json:"browser_stats"`
 	DeviceStats      []DeviceStats     `json:"device_stats"`
+	ClicksByDate     []DateStats       `json:"clicks_by_date"`
 	RecentURLs       []URLWithStats    `json:"recent_urls"`
 	
 	// Feature availability based on tier
 	Features         TierFeatures      `json:"features"`
+}
+
+type DateStats struct {
+	Date   string `json:"date"`
+	Clicks int64  `json:"clicks"`
 }
 
 type CountryStats struct {
@@ -142,6 +148,58 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		log.Printf("[Dashboard] Found %d countries", len(topCountries))
 	}
 
+	// Get browser stats
+	log.Println("[Dashboard] Fetching browser stats...")
+	browsers, err := queries.GetUserClicksByBrowser(c.Context(), user.ID)
+	browserStats := make([]BrowserStats, 0)
+	if err != nil {
+		log.Printf("[Dashboard] Error getting browsers: %v", err)
+	} else {
+		for _, browser := range browsers {
+			if browser.Browser.Valid {
+				browserStats = append(browserStats, BrowserStats{
+					Browser: browser.Browser.String,
+					Clicks:  browser.Clicks,
+				})
+			}
+		}
+		log.Printf("[Dashboard] Found %d browsers", len(browserStats))
+	}
+
+	// Get device stats
+	log.Println("[Dashboard] Fetching device stats...")
+	devices, err := queries.GetUserClicksByDevice(c.Context(), user.ID)
+	deviceStats := make([]DeviceStats, 0)
+	if err != nil {
+		log.Printf("[Dashboard] Error getting devices: %v", err)
+	} else {
+		for _, device := range devices {
+			if device.DeviceType.Valid {
+				deviceStats = append(deviceStats, DeviceStats{
+					DeviceType: device.DeviceType.String,
+					Clicks:     device.Clicks,
+				})
+			}
+		}
+		log.Printf("[Dashboard] Found %d device types", len(deviceStats))
+	}
+
+	// Get clicks by date
+	log.Println("[Dashboard] Fetching clicks by date...")
+	clicksByDate, err := queries.GetUserClicksByDate(c.Context(), user.ID)
+	dateStats := make([]DateStats, 0)
+	if err != nil {
+		log.Printf("[Dashboard] Error getting clicks by date: %v", err)
+	} else {
+		for _, day := range clicksByDate {
+			dateStats = append(dateStats, DateStats{
+				Date:   day.Date.Format("2006-01-02"),
+				Clicks: day.Clicks,
+			})
+		}
+		log.Printf("[Dashboard] Found %d days of data", len(dateStats))
+	}
+
 	// Get recent URLs with stats
 	log.Println("[Dashboard] Fetching recent URLs...")
 	recentURLs := make([]URLWithStats, 0)
@@ -183,8 +241,9 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		URLLimit:        urlLimit,
 		URLsRemaining:   urlsRemaining,
 		TopCountries:    topCountries,
-		BrowserStats:    []BrowserStats{}, // TODO: Implement if needed
-		DeviceStats:     []DeviceStats{},  // TODO: Implement if needed
+		BrowserStats:    browserStats,
+		DeviceStats:     deviceStats,
+		ClicksByDate:    dateStats,
 		RecentURLs:      recentURLs,
 		Features:        features,
 	}
