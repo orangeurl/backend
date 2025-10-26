@@ -33,7 +33,8 @@ func setupRoutes(app *fiber.App) {
 
 	// Public routes
 	app.Get("/:url", routes.ResolveURL)
-	app.Post("/api/v1", url.ShortenURL)
+	// URL shortening with optional auth (saves to user account if authenticated)
+	app.Post("/api/v1", middleware.OptionalAuth(), url.ShortenURL)
 
 	// Webhook routes (public - no auth required)
 	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)

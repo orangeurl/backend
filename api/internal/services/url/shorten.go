@@ -114,12 +114,16 @@ func ShortenURL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to connect to server"})
 	}
 
-	// Sync with Postgres database
-	// Try to get user from context, if not authenticated use a default/anonymous user
+	// Sync with Postgres database if user is authenticated
+	// OptionalAuth middleware will have set user in context if token was provided
 	user, userErr := middleware.GetUserFromContext(c)
 	if userErr == nil {
-		// User is authenticated, save to their account
+		// User is authenticated, save URL to their account in Postgres
 		queries := database.GetQueries()
+		if queries == nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "database not initialized"})
+		}
+		
 		var expiryTime sql.NullTime
 		if body.Expiry > 0 {
 			expiryTime = sql.NullTime{
@@ -136,13 +140,14 @@ func ShortenURL(c *fiber.Ctx) error {
 			IsActive:    sql.NullBool{Bool: true, Valid: true},
 		})
 
-		// Log error but don't fail the request since it's already in Redis
 		if pgErr != nil {
-			// TODO: Implement proper logging
-			_ = pgErr
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to save URL to database",
+				"details": pgErr.Error(),
+			})
 		}
 	}
-	// If user is not authenticated, URL only stored in Redis (existing behavior)
+	// If user is not authenticated, URL only stored in Redis (existing behavior for anonymous users)
 
 	resp := response{
 		URL:             body.URL,

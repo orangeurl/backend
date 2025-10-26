@@ -125,6 +125,51 @@ func RequireAuth() fiber.Handler {
 	return ClerkAuthMiddleware()
 }
 
+// OptionalAuth is middleware that authenticates if token is present, but doesn't fail if not
+func OptionalAuth() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
+		
+		// No auth header? Just continue without setting user
+		if authHeader == "" {
+			return c.Next()
+		}
+
+		// Has auth header, try to verify
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if token == authHeader {
+			// No Bearer prefix, skip auth
+			return c.Next()
+		}
+
+		claims, err := verifyClerkJWT(token)
+		if err != nil {
+			// Invalid token, but don't fail - just continue without user
+			log.Printf("[OptionalAuth] Token verification failed: %v", err)
+			return c.Next()
+		}
+
+		queries := database.GetQueries()
+		if queries == nil {
+			// Database not ready, continue without user
+			return c.Next()
+		}
+
+		user, err := queries.GetUserByClerkID(c.Context(), claims.Subject)
+		if err != nil {
+			// User not found, continue without user
+			return c.Next()
+		}
+
+		// Store user in context
+		c.Locals("user", &user)
+		c.Locals("user_id", user.ID)
+		c.Locals("clerk_id", user.ClerkID)
+
+		return c.Next()
+	}
+}
+
 // Helper function to get user from context
 func GetUserFromContext(c *fiber.Ctx) (*database.User, error) {
 	log.Printf("[GetUserFromContext] Attempting to get user from context...")
