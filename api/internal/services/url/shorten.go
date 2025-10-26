@@ -1,6 +1,7 @@
 package url
 
 import (
+	"database/sql"
 	"os"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/url"
+	"github.com/xenonnn4w/orangeurl/internal/middleware"
 )
 
 type request struct {
@@ -111,6 +113,36 @@ func ShortenURL(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to connect to server"})
 	}
+
+	// Sync with Postgres database
+	// Try to get user from context, if not authenticated use a default/anonymous user
+	user, userErr := middleware.GetUserFromContext(c)
+	if userErr == nil {
+		// User is authenticated, save to their account
+		queries := database.GetQueries()
+		var expiryTime sql.NullTime
+		if body.Expiry > 0 {
+			expiryTime = sql.NullTime{
+				Time:  time.Now().Add(body.Expiry * time.Hour),
+				Valid: true,
+			}
+		}
+
+		_, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
+			UserID:      user.ID,
+			ShortID:     id,
+			OriginalUrl: body.URL,
+			Expiry:      expiryTime,
+			IsActive:    sql.NullBool{Bool: true, Valid: true},
+		})
+
+		// Log error but don't fail the request since it's already in Redis
+		if pgErr != nil {
+			// TODO: Implement proper logging
+			_ = pgErr
+		}
+	}
+	// If user is not authenticated, URL only stored in Redis (existing behavior)
 
 	resp := response{
 		URL:             body.URL,

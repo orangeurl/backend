@@ -82,6 +82,17 @@ func (q *Queries) GetURLByShortID(ctx context.Context, shortID string) (Url, err
 	return i, err
 }
 
+const getUserURLCount = `-- name: GetUserURLCount :one
+SELECT COUNT(*) FROM urls WHERE user_id = $1 AND is_active = TRUE
+`
+
+func (q *Queries) GetUserURLCount(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getUserURLCount, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getUserURLs = `-- name: GetUserURLs :many
 SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at FROM urls WHERE user_id = $1 AND is_active = TRUE
 ORDER BY created_at DESC
@@ -105,6 +116,69 @@ func (q *Queries) GetUserURLs(ctx context.Context, userID uuid.UUID) ([]Url, err
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserURLsWithStats = `-- name: GetUserURLsWithStats :many
+SELECT 
+    u.id,
+    u.user_id,
+    u.short_id,
+    u.original_url,
+    u.expiry,
+    u.is_active,
+    u.created_at,
+    u.updated_at,
+    COUNT(uc.id) as click_count
+FROM urls u
+LEFT JOIN url_clicks uc ON u.id = uc.url_id
+WHERE u.user_id = $1 AND u.is_active = TRUE
+GROUP BY u.id
+ORDER BY u.created_at DESC
+`
+
+type GetUserURLsWithStatsRow struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	ShortID     string
+	OriginalUrl string
+	Expiry      sql.NullTime
+	IsActive    sql.NullBool
+	CreatedAt   sql.NullTime
+	UpdatedAt   sql.NullTime
+	ClickCount  int64
+}
+
+func (q *Queries) GetUserURLsWithStats(ctx context.Context, userID uuid.UUID) ([]GetUserURLsWithStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserURLsWithStats, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserURLsWithStatsRow
+	for rows.Next() {
+		var i GetUserURLsWithStatsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ShortID,
+			&i.OriginalUrl,
+			&i.Expiry,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClickCount,
 		); err != nil {
 			return nil, err
 		}
