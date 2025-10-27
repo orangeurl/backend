@@ -91,6 +91,34 @@ func parseReferrerSource(referer string) string {
 	return "Other"
 }
 
+// extractCountryFromHeaders tries to extract country code from common CDN/proxy headers
+func extractCountryFromHeaders(c *fiber.Ctx) string {
+	// Check for Cloudflare country header
+	if country := c.Get("CF-IPCountry"); country != "" {
+		return country
+	}
+	
+	// Check for other common geo headers
+	if country := c.Get("X-Country-Code"); country != "" {
+		return country
+	}
+	
+	if country := c.Get("x-rg-country"); country != "" {
+		return country
+	}
+	
+	if country := c.Get("x-forwarded-country"); country != "" {
+		return country
+	}
+	
+	// Fastly geo header
+	if country := c.Get("Fastly-Geo-Country"); country != "" {
+		return country
+	}
+	
+	return ""
+}
+
 func ResolveURL(c *fiber.Ctx) error {
 	url := c.Params("url")
 
@@ -152,8 +180,10 @@ func ResolveURL(c *fiber.Ctx) error {
 		os := parseOS(userAgent)
 		botDetected := isBot(userAgent)
 
+		// Try to get country from common headers set by CDNs/proxies
+		country := extractCountryFromHeaders(c)
+
 		// Create click record
-		// Note: country and city would need a GeoIP service, using null for now
 		// Parse IP address using net package
 		ipAddr := pqtype.Inet{Valid: false}
 		if parsedIP := net.ParseIP(ipAddress); parsedIP != nil {
@@ -174,7 +204,7 @@ func ResolveURL(c *fiber.Ctx) error {
 			IpAddress:  ipAddr,
 			UserAgent:  sql.NullString{String: userAgent, Valid: userAgent != ""},
 			Referer:    sql.NullString{String: referer, Valid: referer != ""},
-			Country:    sql.NullString{Valid: false}, // TODO: Implement GeoIP lookup
+			Country:    sql.NullString{String: country, Valid: country != ""},
 			City:       sql.NullString{Valid: false}, // TODO: Implement GeoIP lookup
 			DeviceType: sql.NullString{String: deviceType, Valid: true},
 			Browser:    sql.NullString{String: browser, Valid: true},
