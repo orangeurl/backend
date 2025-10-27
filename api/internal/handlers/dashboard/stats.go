@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -60,6 +61,11 @@ type BrowserStats struct {
 type DeviceStats struct {
 	DeviceType string `json:"device_type"`
 	Clicks     int64  `json:"clicks"`
+}
+
+type ReferrerStats struct {
+	Source string `json:"source"`
+	Clicks int64  `json:"clicks"`
 }
 
 type URLWithStats struct {
@@ -318,6 +324,48 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 		}
 	}
 
+	// Parse referrer sources from clicks
+	referrerMap := make(map[string]int64)
+	for _, click := range clicks {
+		if click.Referer.Valid && click.Referer.String != "" {
+			source := parseReferrerSource(click.Referer.String)
+			referrerMap[source]++
+		} else {
+			referrerMap["Direct"]++
+		}
+	}
+	
+	referrerStats := make([]ReferrerStats, 0)
+	for source, clicks := range referrerMap {
+		referrerStats = append(referrerStats, ReferrerStats{
+			Source: source,
+			Clicks: clicks,
+		})
+	}
+
+	// Format clicks by date for response
+	formattedClicksByDate := make([]DateStats, 0)
+	for _, dateStat := range clicksByDate {
+		formattedClicksByDate = append(formattedClicksByDate, DateStats{
+			Date:   dateStat.Date.Format("2006-01-02"),
+			Clicks: dateStat.Clicks,
+		})
+	}
+
+	// Format recent clicks with proper timestamps
+	recentClicksFormatted := make([]map[string]interface{}, 0)
+	for _, click := range clicks[:min(len(clicks), 50)] {
+		recentClick := map[string]interface{}{
+			"clicked_at": click.ClickedAt.Time,
+			"device_type": click.DeviceType.String,
+			"browser": click.Browser.String,
+			"os": click.Os.String,
+			"country": click.Country.String,
+			"referer": click.Referer.String,
+		}
+		recentClicksFormatted = append(recentClicksFormatted, recentClick)
+	}
+
 	response := fiber.Map{
 		"url": fiber.Map{
 			"short_id":     url.ShortID,
@@ -326,13 +374,39 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 			"is_active":    url.IsActive,
 		},
 		"total_clicks":    len(clicks),
-		"clicks_by_date":  clicksByDate,
+		"clicks_by_date":  formattedClicksByDate,
 		"browser_stats":   browsers,
 		"device_stats":    devices,
-		"recent_clicks":   clicks[:min(len(clicks), 50)], // Return last 50 clicks
+		"referrer_stats":  referrerStats,
+		"recent_clicks":   recentClicksFormatted,
 	}
 
 	return c.JSON(response)
+}
+
+// parseReferrerSource categorizes referrer URLs into meaningful sources
+func parseReferrerSource(referer string) string {
+	ref := strings.ToLower(referer)
+	
+	if strings.Contains(ref, "youtube.com") || strings.Contains(ref, "youtu.be") {
+		return "YouTube"
+	} else if strings.Contains(ref, "twitter.com") || strings.Contains(ref, "x.com") {
+		return "X"
+	} else if strings.Contains(ref, "instagram.com") {
+		return "Instagram"
+	} else if strings.Contains(ref, "linkedin.com") {
+		return "LinkedIn"
+	} else if strings.Contains(ref, "medium.com") {
+		return "Medium"
+	} else if strings.Contains(ref, "facebook.com") || strings.Contains(ref, "fb.com") {
+		return "Facebook"
+	} else if strings.Contains(ref, "reddit.com") {
+		return "Reddit"
+	} else if strings.Contains(ref, "tiktok.com") {
+		return "TikTok"
+	}
+	
+	return "Other"
 }
 
 // Helper functions

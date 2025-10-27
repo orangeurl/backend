@@ -63,6 +63,34 @@ func isBot(ua string) bool {
 	return false
 }
 
+func parseReferrerSource(referer string) string {
+	if referer == "" {
+		return "Direct"
+	}
+	
+	ref := strings.ToLower(referer)
+	
+	if strings.Contains(ref, "youtube.com") || strings.Contains(ref, "youtu.be") {
+		return "YouTube"
+	} else if strings.Contains(ref, "twitter.com") || strings.Contains(ref, "x.com") {
+		return "X"
+	} else if strings.Contains(ref, "instagram.com") {
+		return "Instagram"
+	} else if strings.Contains(ref, "linkedin.com") {
+		return "LinkedIn"
+	} else if strings.Contains(ref, "medium.com") {
+		return "Medium"
+	} else if strings.Contains(ref, "facebook.com") || strings.Contains(ref, "fb.com") {
+		return "Facebook"
+	} else if strings.Contains(ref, "reddit.com") {
+		return "Reddit"
+	} else if strings.Contains(ref, "tiktok.com") {
+		return "TikTok"
+	}
+	
+	return "Other"
+}
+
 func ResolveURL(c *fiber.Ctx) error {
 	url := c.Params("url")
 

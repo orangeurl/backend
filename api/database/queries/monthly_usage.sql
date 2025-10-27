@@ -23,3 +23,4 @@ ON CONFLICT (user_id, month)
 DO UPDATE SET qr_code_count = monthly_usage.qr_code_count + 1, updated_at = NOW()
 RETURNING *;
 
+

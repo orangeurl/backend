@@ -14,3 +14,4 @@ CREATE TABLE monthly_usage(
 -- +goose Down
 DROP TABLE monthly_usage;
 
+
