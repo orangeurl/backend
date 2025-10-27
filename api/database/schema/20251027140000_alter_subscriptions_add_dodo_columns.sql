@@ -20,3 +20,4 @@ ALTER TABLE subscriptions
 DROP INDEX IF EXISTS idx_subscriptions_dp_sub_id;
 DROP INDEX IF EXISTS idx_subscriptions_dp_customer_id;
 
+
