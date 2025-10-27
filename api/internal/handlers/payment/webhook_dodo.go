@@ -18,27 +18,43 @@ import (
 
 // Minimal event model; expand as needed
 type DodoCustomer struct {
-	CustomerID string `json:"customer_id"`
-	Email      string `json:"email"`
-	Name       string `json:"name"`
+	CustomerID  string `json:"customer_id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	PhoneNumber string `json:"phone_number,omitempty"`
 }
 
-type DodoSubscription struct {
-	SubscriptionID      string `json:"subscription_id"`
-	ProductID           string `json:"product_id"`
-	PlanName            string `json:"plan_name"` // optional if sent
-	Currency            string `json:"currency"`
-	BillingInterval     string `json:"billing_interval"` // e.g., "monthly"
-	CurrentPeriodStart  string `json:"current_period_start"`
-	CurrentPeriodEnd    string `json:"current_period_end"`
-	CancelAtPeriodEnd   bool   `json:"cancel_at_period_end"`
+type DodoSubscriptionData struct {
+	SubscriptionID      string        `json:"subscription_id"`
+	ProductID           string        `json:"product_id"`
+	Status              string        `json:"status"`
+	Currency            string        `json:"currency"`
+	CreatedAt           string        `json:"created_at"`
+	ExpiresAt           string        `json:"expires_at"`
+	NextBillingDate     string        `json:"next_billing_date"`
+	PreviousBillingDate string        `json:"previous_billing_date"`
+	Customer            DodoCustomer  `json:"customer"`
+	Billing             struct {
+		City    string `json:"city"`
+		Country string `json:"country"`
+		State   string `json:"state"`
+		Street  string `json:"street"`
+		Zipcode string `json:"zipcode"`
+	} `json:"billing"`
 }
 
 type DodoEvent struct {
-	Type         string           `json:"type"`
-	Customer     DodoCustomer     `json:"customer"`
-	Subscription DodoSubscription `json:"subscription"`
-	// You can include payment or invoice details if needed
+	Type       string              `json:"type"`
+	BusinessID string              `json:"business_id"`
+	Data       DodoSubscriptionData `json:"data"`
+	Timestamp  string              `json:"timestamp"`
+}
+
+// Helper to extract customer from nested data
+func (evt *DodoEvent) GetCustomer() map[string]interface{} {
+	// Customer is in data.customer based on logs
+	// But we need to unmarshal it separately
+	return nil
 }
 
 func HandleDodoWebhook(c *fiber.Ctx) error {
@@ -74,33 +90,30 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 
 	queries := database.GetQueries()
 
-	// Resolve user by email from customer
-	if evt.Customer.Email == "" {
-		// If email is not present, you could resolve by evt.Customer.CustomerID
+	// Extract customer from nested data
+	customerEmail := evt.Data.Customer.Email
+	if customerEmail == "" {
+		log.Printf("No email in customer data")
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "missing customer email"})
 	}
 
-	user, err := queries.GetUserByEmail(c.Context(), evt.Customer.Email)
+	user, err := queries.GetUserByEmail(c.Context(), customerEmail)
 	if err != nil {
-		log.Printf("user not found for email=%s: %v", evt.Customer.Email, err)
+		log.Printf("user not found for email=%s: %v", customerEmail, err)
 		// Optional: return 200 to avoid retries if you only create subs post-registration
 		return c.Status(http.StatusOK).JSON(fiber.Map{"message": "user not registered yet"})
 	}
 
-	// Normalize plan name by product mapping (optional)
-	planID := evt.Subscription.ProductID
-	planName := strings.ToLower(evt.Subscription.PlanName)
-	if planName == "" {
-		// fallback infer
-		planName = inferPlanName(planID)
-	}
+	// Get plan info from data
+	planID := evt.Data.ProductID
+	planName := inferPlanName(planID)
 
-	// Parse period times
+	// Parse period times from the webhook data
 	var periodStart, periodEnd time.Time
-	if t, err := time.Parse(time.RFC3339, evt.Subscription.CurrentPeriodStart); err == nil {
+	if t, err := time.Parse(time.RFC3339, evt.Data.CreatedAt); err == nil {
 		periodStart = t
 	}
-	if t, err := time.Parse(time.RFC3339, evt.Subscription.CurrentPeriodEnd); err == nil {
+	if t, err := time.Parse(time.RFC3339, evt.Data.NextBillingDate); err == nil {
 		periodEnd = t
 	}
 
@@ -109,11 +122,12 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 		// Upsert subscription
 		if _, err := queries.GetUserSubscription(c.Context(), user.ID); err != nil {
 			// create
+			customerID := evt.Data.Customer.CustomerID
 			_, err = queries.CreateSubscription(c.Context(), database.CreateSubscriptionParams{
 				UserID:                 user.ID,
 				PlanID:                 planID,
 				Status:                 "active",
-				DodopaymentsCustomerID: sql.NullString{String: evt.Customer.CustomerID, Valid: evt.Customer.CustomerID != ""},
+				DodopaymentsCustomerID: sql.NullString{String: customerID, Valid: customerID != ""},
 			})
 			if err != nil {
 				log.Printf("create subscription failed: %v", err)
