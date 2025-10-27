@@ -54,11 +54,14 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 		log.Printf("DODO_WEBHOOK_SECRET not set, skipping verification for testing")
 		// For testing, allow without signature verification
 		// In production, this should return an error
-	} else {
+	} else if signature != "" {
+		// Only verify signature if it's provided and secret exists
 		if !verifySignature(raw, signature, secret) {
-			log.Printf("Signature verification failed")
+			log.Printf("Signature verification failed. Signature: %s, Raw length: %d", signature, len(raw))
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid signature"})
 		}
+	} else {
+		log.Printf("No signature provided, skipping verification for testing")
 	}
 
 	log.Printf("Received webhook payload: %s", string(raw))
