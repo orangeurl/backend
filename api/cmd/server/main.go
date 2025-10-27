@@ -14,6 +14,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/analytics"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/auth"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/dashboard"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/payment"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
@@ -39,6 +40,7 @@ func setupRoutes(app *fiber.App) {
 
 	// Webhook routes (public - no auth required)
 	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)
+	app.Post("/api/webhooks/dodo", payment.HandleDodoWebhook)
 
 	// Waitlist route (public - no auth required)
 	app.Post("/api/v1/api/waitlist", waitlist.JoinWaitlist)

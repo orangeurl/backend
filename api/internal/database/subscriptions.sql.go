@@ -15,7 +15,7 @@ import (
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO subscriptions (user_id, plan_id, status, dodopayments_customer_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency
 `
 
 type CreateSubscriptionParams struct {
@@ -44,12 +44,15 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.DodopaymentsCustomerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
 	)
 	return i, err
 }
 
 const getUserSubscription = `-- name: GetUserSubscription :one
-SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at FROM subscriptions WHERE user_id = $1
+SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency FROM subscriptions WHERE user_id = $1
 `
 
 func (q *Queries) GetUserSubscription(ctx context.Context, userID uuid.UUID) (Subscription, error) {
@@ -66,12 +69,15 @@ func (q *Queries) GetUserSubscription(ctx context.Context, userID uuid.UUID) (Su
 		&i.DodopaymentsCustomerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
 	)
 	return i, err
 }
 
 const listSubscriptions = `-- name: ListSubscriptions :many
-SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at FROM subscriptions ORDER BY created_at DESC
+SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency FROM subscriptions ORDER BY created_at DESC
 `
 
 func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error) {
@@ -94,6 +100,9 @@ func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error)
 			&i.DodopaymentsCustomerID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.BillingInterval,
+			&i.CancelAtPeriodEnd,
+			&i.Currency,
 		); err != nil {
 			return nil, err
 		}
@@ -112,7 +121,7 @@ const updateSubscription = `-- name: UpdateSubscription :one
 UPDATE subscriptions 
 SET plan_id = $2, status = $3, current_period_start = $4, current_period_end = $5, updated_at = NOW()
 WHERE user_id = $1
-RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency
 `
 
 type UpdateSubscriptionParams struct {
@@ -143,6 +152,46 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.DodopaymentsCustomerID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+	)
+	return i, err
+}
+
+const updateSubscriptionSetDPIDs = `-- name: UpdateSubscriptionSetDPIDs :one
+UPDATE subscriptions
+SET
+  dodopayments_subscription_id = COALESCE($2, dodopayments_subscription_id),
+  dodopayments_customer_id = COALESCE($3, dodopayments_customer_id),
+  updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency
+`
+
+type UpdateSubscriptionSetDPIDsParams struct {
+	UserID                     uuid.UUID
+	DodopaymentsSubscriptionID sql.NullString
+	DodopaymentsCustomerID     sql.NullString
+}
+
+func (q *Queries) UpdateSubscriptionSetDPIDs(ctx context.Context, arg UpdateSubscriptionSetDPIDsParams) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, updateSubscriptionSetDPIDs, arg.UserID, arg.DodopaymentsSubscriptionID, arg.DodopaymentsCustomerID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
 	)
 	return i, err
 }
