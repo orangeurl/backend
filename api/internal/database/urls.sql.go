@@ -13,17 +13,19 @@ import (
 )
 
 const createURL = `-- name: CreateURL :one
-INSERT INTO urls (user_id, short_id, original_url, expiry, is_active)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at
+INSERT INTO urls (user_id, short_id, original_url, expiry, is_active, password_hash, is_locked)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt
 `
 
 type CreateURLParams struct {
-	UserID      uuid.UUID
-	ShortID     string
-	OriginalUrl string
-	Expiry      sql.NullTime
-	IsActive    sql.NullBool
+	UserID       uuid.UUID
+	ShortID      string
+	OriginalUrl  string
+	Expiry       sql.NullTime
+	IsActive     sql.NullBool
+	PasswordHash sql.NullString
+	IsLocked     sql.NullBool
 }
 
 func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, error) {
@@ -33,6 +35,8 @@ func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, erro
 		arg.OriginalUrl,
 		arg.Expiry,
 		arg.IsActive,
+		arg.PasswordHash,
+		arg.IsLocked,
 	)
 	var i Url
 	err := row.Scan(
@@ -44,6 +48,10 @@ func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, erro
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
 	)
 	return i, err
 }
@@ -63,7 +71,7 @@ func (q *Queries) DeleteURL(ctx context.Context, arg DeleteURLParams) error {
 }
 
 const getURLByShortID = `-- name: GetURLByShortID :one
-SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at FROM urls WHERE short_id = $1 AND is_active = TRUE
+SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls WHERE short_id = $1 AND is_active = TRUE
 `
 
 func (q *Queries) GetURLByShortID(ctx context.Context, shortID string) (Url, error) {
@@ -78,6 +86,10 @@ func (q *Queries) GetURLByShortID(ctx context.Context, shortID string) (Url, err
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
 	)
 	return i, err
 }
@@ -94,7 +106,7 @@ func (q *Queries) GetUserURLCount(ctx context.Context, userID uuid.UUID) (int64,
 }
 
 const getUserURLs = `-- name: GetUserURLs :many
-SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at FROM urls WHERE user_id = $1 AND is_active = TRUE
+SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls WHERE user_id = $1 AND is_active = TRUE
 ORDER BY created_at DESC
 `
 
@@ -116,6 +128,10 @@ func (q *Queries) GetUserURLs(ctx context.Context, userID uuid.UUID) ([]Url, err
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PasswordHash,
+			&i.IsLocked,
+			&i.PasswordAttempts,
+			&i.LastPasswordAttempt,
 		); err != nil {
 			return nil, err
 		}
@@ -130,8 +146,19 @@ func (q *Queries) GetUserURLs(ctx context.Context, userID uuid.UUID) ([]Url, err
 	return items, nil
 }
 
+const incrementPasswordAttempts = `-- name: IncrementPasswordAttempts :exec
+UPDATE urls
+SET password_attempts = password_attempts + 1, last_password_attempt = NOW()
+WHERE short_id = $1
+`
+
+func (q *Queries) IncrementPasswordAttempts(ctx context.Context, shortID string) error {
+	_, err := q.db.ExecContext(ctx, incrementPasswordAttempts, shortID)
+	return err
+}
+
 const listURLs = `-- name: ListURLs :many
-SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at FROM urls ORDER BY created_at DESC
+SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls ORDER BY created_at DESC
 `
 
 func (q *Queries) ListURLs(ctx context.Context) ([]Url, error) {
@@ -152,6 +179,10 @@ func (q *Queries) ListURLs(ctx context.Context) ([]Url, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PasswordHash,
+			&i.IsLocked,
+			&i.PasswordAttempts,
+			&i.LastPasswordAttempt,
 		); err != nil {
 			return nil, err
 		}
@@ -166,11 +197,82 @@ func (q *Queries) ListURLs(ctx context.Context) ([]Url, error) {
 	return items, nil
 }
 
+const removeURLPassword = `-- name: RemoveURLPassword :one
+UPDATE urls
+SET password_hash = NULL, is_locked = FALSE, password_attempts = 0, last_password_attempt = NULL, updated_at = NOW()
+WHERE id = $1
+RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt
+`
+
+func (q *Queries) RemoveURLPassword(ctx context.Context, id uuid.UUID) (Url, error) {
+	row := q.db.QueryRowContext(ctx, removeURLPassword, id)
+	var i Url
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ShortID,
+		&i.OriginalUrl,
+		&i.Expiry,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
+	)
+	return i, err
+}
+
+const resetPasswordAttempts = `-- name: ResetPasswordAttempts :exec
+UPDATE urls
+SET password_attempts = 0, last_password_attempt = NULL
+WHERE short_id = $1
+`
+
+func (q *Queries) ResetPasswordAttempts(ctx context.Context, shortID string) error {
+	_, err := q.db.ExecContext(ctx, resetPasswordAttempts, shortID)
+	return err
+}
+
+const setURLPassword = `-- name: SetURLPassword :one
+UPDATE urls
+SET password_hash = $2, is_locked = $3, updated_at = NOW()
+WHERE id = $1
+RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt
+`
+
+type SetURLPasswordParams struct {
+	ID           uuid.UUID
+	PasswordHash sql.NullString
+	IsLocked     sql.NullBool
+}
+
+func (q *Queries) SetURLPassword(ctx context.Context, arg SetURLPasswordParams) (Url, error) {
+	row := q.db.QueryRowContext(ctx, setURLPassword, arg.ID, arg.PasswordHash, arg.IsLocked)
+	var i Url
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ShortID,
+		&i.OriginalUrl,
+		&i.Expiry,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
+	)
+	return i, err
+}
+
 const updateURL = `-- name: UpdateURL :one
 UPDATE urls 
 SET original_url = $2, expiry = $3, is_active = $4, updated_at = NOW()
 WHERE id = $1
-RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at
+RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt
 `
 
 type UpdateURLParams struct {
@@ -197,6 +299,10 @@ func (q *Queries) UpdateURL(ctx context.Context, arg UpdateURLParams) (Url, erro
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
 	)
 	return i, err
 }

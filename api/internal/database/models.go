@@ -39,14 +39,18 @@ type Subscription struct {
 }
 
 type Url struct {
-	ID          uuid.UUID
-	UserID      uuid.UUID
-	ShortID     string
-	OriginalUrl string
-	Expiry      sql.NullTime
-	IsActive    sql.NullBool
-	CreatedAt   sql.NullTime
-	UpdatedAt   sql.NullTime
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	ShortID             string
+	OriginalUrl         string
+	Expiry              sql.NullTime
+	IsActive            sql.NullBool
+	CreatedAt           sql.NullTime
+	UpdatedAt           sql.NullTime
+	PasswordHash        sql.NullString
+	IsLocked            sql.NullBool
+	PasswordAttempts    sql.NullInt32
+	LastPasswordAttempt sql.NullTime
 }
 
 type UrlClick struct {

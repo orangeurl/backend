@@ -231,11 +231,13 @@ func ShortenURL(c *fiber.Ctx) error {
 		}
 
 		_, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
-			UserID:      user.ID,
-			ShortID:     id,
-			OriginalUrl: body.URL,
-			Expiry:      expiryTime,
-			IsActive:    sql.NullBool{Bool: true, Valid: true},
+			UserID:       user.ID,
+			ShortID:      id,
+			OriginalUrl:  body.URL,
+			Expiry:       expiryTime,
+			IsActive:     sql.NullBool{Bool: true, Valid: true},
+			PasswordHash: sql.NullString{Valid: false}, // No password by default
+			IsLocked:     sql.NullBool{Bool: false, Valid: true},
 		})
 
 		if pgErr != nil {

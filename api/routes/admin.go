@@ -2,7 +2,7 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/xenonnn4w/short-url/database"
+	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
 type URLMapping struct {
