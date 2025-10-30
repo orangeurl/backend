@@ -3,6 +3,7 @@ package urls
 import (
 	"database/sql"
 	"log"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ func SetURLPassword(c *fiber.Ctx) error {
 	// Check if user has Premium subscription
 	queries := database.GetQueries()
 	subscription, err := queries.GetUserSubscription(c.Context(), user.ID)
-	if err != nil || subscription.PlanID != "premium" {
+	if err != nil || strings.ToLower(subscription.PlanID) != "premium" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Link locking is a Premium-only feature. Upgrade to Premium to use this feature.",
 			"upgrade_required": true,
