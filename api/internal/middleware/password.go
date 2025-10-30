@@ -129,7 +129,7 @@ func PasswordProtectionMiddleware(c *fiber.Ctx) error {
 	}
 
 	// URL is locked, redirect to unlock page
-	unlockURL := fmt.Sprintf("https://app.orangeurl.live/l/%s", shortID)
+	unlockURL := fmt.Sprintf("https://lock.orangeurl.live/%s", shortID)
 	fmt.Printf("[PasswordMiddleware] Redirecting locked URL %s to %s\n", shortID, unlockURL)
 	return c.Redirect(unlockURL, fiber.StatusTemporaryRedirect)
 }
