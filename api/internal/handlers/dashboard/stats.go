@@ -76,6 +76,7 @@ type URLWithStats struct {
 	Clicks      int64     `json:"clicks"`
 	CreatedAt   time.Time `json:"created_at"`
 	IsActive    bool      `json:"is_active"`
+	IsLocked    bool      `json:"is_locked"`
 }
 
 type TierFeatures struct {
@@ -231,6 +232,7 @@ func GetDashboardStats(c *fiber.Ctx) error {
 				Clicks:      int64(len(clicks)),
 				CreatedAt:   url.CreatedAt.Time,
 				IsActive:    url.IsActive.Bool,
+				IsLocked:    url.IsLocked.Valid && url.IsLocked.Bool,
 			})
 			if len(recentURLs) >= 10 {
 				break
