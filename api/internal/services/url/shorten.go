@@ -91,7 +91,31 @@ func ShortenURL(c *fiber.Ctx) error {
 	if body.CustomShort == "" {
 		id = uuid.New().String()[:6]
 	} else {
+		// Preserve exact capitalization as provided by user (e.g., "Snow" stays "Snow", not "snow")
 		id = body.CustomShort
+
+		// Admin-only restriction: custom shorts with length <= 2 are reserved for admins
+		if len(id) <= 2 {
+			user, userErr := middleware.GetUserFromContext(c)
+			isAdmin := false
+
+			if userErr == nil {
+				// User is authenticated, check if they are admin
+				queries := database.GetQueries()
+				if queries != nil {
+					userDetails, err := queries.GetUserByID(c.Context(), user.ID)
+					if err == nil {
+						// IsAdmin is sql.NullBool, check both Valid and Bool fields
+						isAdmin = userDetails.IsAdmin.Valid && userDetails.IsAdmin.Bool
+					}
+				}
+			}
+
+			// If user is not admin, reject the custom short
+			if !isAdmin {
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "URL already taken"})
+			}
+		}
 	}
 
 	r := database.CreateClient(0)
@@ -102,10 +126,39 @@ func ShortenURL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "URL already taken"})
 	}
 
-	// checking the expiry
-
+	// checking the expiry - set based on user tier
+	// Free: 1 year, Pro: 5 years, Premium: 5 years
 	if body.Expiry == 0 {
-		body.Expiry = 24
+		// Default expiry based on tier
+		// Free tier gets 1 year (8760 hours)
+		// Pro/Premium tiers get 5 years (43800 hours)
+		defaultExpiry := 8760 // 1 year in hours for free tier
+
+		// Check if user is authenticated to determine tier
+		user, userErr := middleware.GetUserFromContext(c)
+		if userErr == nil {
+			// User is authenticated - check their tier
+			tier := user.SubscriptionTier
+			if tier == "" {
+				tier = "free"
+			}
+
+			// Override with subscriptions table if available
+			queries := database.GetQueries()
+			if queries != nil {
+				subscription, subErr := queries.GetUserSubscription(c.Context(), user.ID)
+				if subErr == nil && subscription.PlanID != "" {
+					tier = subscription.PlanID
+				}
+			}
+
+			// Set expiry based on tier
+			if tier == "pro" || tier == "premium" {
+				defaultExpiry = 43800 // 5 years in hours
+			}
+		}
+		// Anonymous users get 1 year (free tier default)
+		body.Expiry = time.Duration(defaultExpiry)
 	}
 
 	//doubt regarding the time

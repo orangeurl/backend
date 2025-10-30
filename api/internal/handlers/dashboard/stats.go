@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -343,6 +344,59 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 		})
 	}
 
+	// Get referrer clicks by date for the area chart
+	referrerClicksByDate, _ := queries.GetURLClicksByReferrerAndDate(c.Context(), url.ID)
+
+	// Transform data: group by date with referrer breakdown
+	dateReferrerMap := make(map[string]map[string]int64)
+	allSources := make(map[string]bool)
+
+	for _, row := range referrerClicksByDate {
+		dateStr := row.Date.Format("2006-01-02")
+
+		// Parse referrer source
+		var source string
+		if row.Referer.Valid && row.Referer.String != "" {
+			source = parseReferrerSource(row.Referer.String)
+		} else {
+			source = "Direct"
+		}
+
+		// Initialize date map if not exists
+		if dateReferrerMap[dateStr] == nil {
+			dateReferrerMap[dateStr] = make(map[string]int64)
+		}
+
+		// Add clicks to the source for this date
+		dateReferrerMap[dateStr][source] += row.Clicks
+		allSources[source] = true
+	}
+
+	// Format as array of objects with date and all sources as keys
+	referrerClicksByDateFormatted := make([]map[string]interface{}, 0)
+	for dateStr, sources := range dateReferrerMap {
+		entry := map[string]interface{}{
+			"date": dateStr,
+		}
+
+		// Add each source as a key with click count
+		totalForDate := int64(0)
+		for source, clicks := range sources {
+			entry[source] = clicks
+			totalForDate += clicks
+		}
+
+		// Only include dates with clicks > 0
+		if totalForDate > 0 {
+			referrerClicksByDateFormatted = append(referrerClicksByDateFormatted, entry)
+		}
+	}
+
+	// Sort by date descending
+	sort.Slice(referrerClicksByDateFormatted, func(i, j int) bool {
+		return referrerClicksByDateFormatted[i]["date"].(string) > referrerClicksByDateFormatted[j]["date"].(string)
+	})
+
 	// Format clicks by date for response
 	formattedClicksByDate := make([]DateStats, 0)
 	for _, dateStat := range clicksByDate {
@@ -373,12 +427,13 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 			"created_at":   url.CreatedAt,
 			"is_active":    url.IsActive,
 		},
-		"total_clicks":    len(clicks),
-		"clicks_by_date":  formattedClicksByDate,
-		"browser_stats":   browsers,
-		"device_stats":    devices,
-		"referrer_stats":  referrerStats,
-		"recent_clicks":   recentClicksFormatted,
+		"total_clicks":             len(clicks),
+		"clicks_by_date":           formattedClicksByDate,
+		"browser_stats":            browsers,
+		"device_stats":             devices,
+		"referrer_stats":           referrerStats,
+		"referrer_clicks_by_date":  referrerClicksByDateFormatted,
+		"recent_clicks":            recentClicksFormatted,
 	}
 
 	return c.JSON(response)
@@ -387,7 +442,7 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 // parseReferrerSource categorizes referrer URLs into meaningful sources
 func parseReferrerSource(referer string) string {
 	ref := strings.ToLower(referer)
-	
+
 	if strings.Contains(ref, "youtube.com") || strings.Contains(ref, "youtu.be") {
 		return "YouTube"
 	} else if strings.Contains(ref, "twitter.com") || strings.Contains(ref, "x.com") {
@@ -404,8 +459,14 @@ func parseReferrerSource(referer string) string {
 		return "Reddit"
 	} else if strings.Contains(ref, "tiktok.com") {
 		return "TikTok"
+	} else if strings.Contains(ref, "t.me") || strings.Contains(ref, "telegram.org") {
+		return "Telegram"
+	} else if strings.Contains(ref, "discord.com") || strings.Contains(ref, "discord.gg") {
+		return "Discord"
+	} else if strings.Contains(ref, "google.com") || strings.Contains(ref, "google.") {
+		return "Google"
 	}
-	
+
 	return "Other"
 }
 

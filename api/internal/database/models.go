@@ -74,6 +74,7 @@ type User struct {
 	SubscriptionTier string
 	CreatedAt        sql.NullTime
 	UpdatedAt        sql.NullTime
+	IsAdmin          sql.NullBool
 }
 
 type Waitlist struct {

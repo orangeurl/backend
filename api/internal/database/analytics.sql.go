@@ -219,6 +219,46 @@ func (q *Queries) GetURLClicksByDevice(ctx context.Context, urlID uuid.UUID) ([]
 	return items, nil
 }
 
+const getURLClicksByReferrerAndDate = `-- name: GetURLClicksByReferrerAndDate :many
+SELECT
+    DATE(clicked_at) as date,
+    referer,
+    COUNT(*) as clicks
+FROM url_clicks
+WHERE url_id = $1
+GROUP BY DATE(clicked_at), referer
+ORDER BY date DESC, clicks DESC
+`
+
+type GetURLClicksByReferrerAndDateRow struct {
+	Date    time.Time
+	Referer sql.NullString
+	Clicks  int64
+}
+
+func (q *Queries) GetURLClicksByReferrerAndDate(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByReferrerAndDateRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLClicksByReferrerAndDate, urlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLClicksByReferrerAndDateRow
+	for rows.Next() {
+		var i GetURLClicksByReferrerAndDateRow
+		if err := rows.Scan(&i.Date, &i.Referer, &i.Clicks); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserAnalytics = `-- name: GetUserAnalytics :many
 SELECT uc.id, uc.url_id, uc.ip_address, uc.user_agent, uc.referer, uc.country, uc.city, uc.device_type, uc.browser, uc.os, uc.is_bot, uc.clicked_at FROM url_clicks uc
 JOIN urls u ON uc.url_id = u.id
@@ -373,7 +413,7 @@ func (q *Queries) GetUserClicksByCountry(ctx context.Context, userID uuid.UUID) 
 }
 
 const getUserClicksByDate = `-- name: GetUserClicksByDate :many
-SELECT 
+SELECT
     DATE(clicked_at) as date,
     COUNT(*) as clicks
 FROM url_clicks uc

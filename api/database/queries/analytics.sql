@@ -83,7 +83,7 @@ GROUP BY device_type
 ORDER BY clicks DESC;
 
 -- name: GetUserClicksByDate :many
-SELECT 
+SELECT
     DATE(clicked_at) as date,
     COUNT(*) as clicks
 FROM url_clicks uc
@@ -92,3 +92,13 @@ WHERE u.user_id = $1
 GROUP BY DATE(clicked_at)
 ORDER BY date DESC
 LIMIT 30;
+
+-- name: GetURLClicksByReferrerAndDate :many
+SELECT
+    DATE(clicked_at) as date,
+    referer,
+    COUNT(*) as clicks
+FROM url_clicks
+WHERE url_id = $1
+GROUP BY DATE(clicked_at), referer
+ORDER BY date DESC, clicks DESC;

@@ -67,9 +67,9 @@ func parseReferrerSource(referer string) string {
 	if referer == "" {
 		return "Direct"
 	}
-	
+
 	ref := strings.ToLower(referer)
-	
+
 	if strings.Contains(ref, "youtube.com") || strings.Contains(ref, "youtu.be") {
 		return "YouTube"
 	} else if strings.Contains(ref, "twitter.com") || strings.Contains(ref, "x.com") {
@@ -86,8 +86,14 @@ func parseReferrerSource(referer string) string {
 		return "Reddit"
 	} else if strings.Contains(ref, "tiktok.com") {
 		return "TikTok"
+	} else if strings.Contains(ref, "t.me") || strings.Contains(ref, "telegram.org") {
+		return "Telegram"
+	} else if strings.Contains(ref, "discord.com") || strings.Contains(ref, "discord.gg") {
+		return "Discord"
+	} else if strings.Contains(ref, "google.com") || strings.Contains(ref, "google.") {
+		return "Google"
 	}
-	
+
 	return "Other"
 }
 

@@ -15,7 +15,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (clerk_id, email, first_name, last_name, avatar_url)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at
+RETURNING id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at, is_admin
 `
 
 type CreateUserParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.SubscriptionTier,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsAdmin,
 	)
 	return i, err
 }
@@ -59,7 +60,7 @@ func (q *Queries) DeleteUser(ctx context.Context, clerkID string) error {
 }
 
 const getUserByClerkID = `-- name: GetUserByClerkID :one
-SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at FROM users WHERE clerk_id = $1
+SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at, is_admin FROM users WHERE clerk_id = $1
 `
 
 func (q *Queries) GetUserByClerkID(ctx context.Context, clerkID string) (User, error) {
@@ -75,12 +76,13 @@ func (q *Queries) GetUserByClerkID(ctx context.Context, clerkID string) (User, e
 		&i.SubscriptionTier,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsAdmin,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at FROM users WHERE email = $1
+SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at, is_admin FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -96,12 +98,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.SubscriptionTier,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsAdmin,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at FROM users WHERE id = $1
+SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at, is_admin FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -117,12 +120,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.SubscriptionTier,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsAdmin,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at FROM users ORDER BY created_at DESC
+SELECT id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at, is_admin FROM users ORDER BY created_at DESC
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -144,6 +148,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.SubscriptionTier,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsAdmin,
 		); err != nil {
 			return nil, err
 		}
@@ -162,7 +167,7 @@ const updateUser = `-- name: UpdateUser :one
 UPDATE users 
 SET email = $2, first_name = $3, last_name = $4, avatar_url = $5, updated_at = NOW()
 WHERE clerk_id = $1
-RETURNING id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at
+RETURNING id, clerk_id, email, first_name, last_name, avatar_url, subscription_tier, created_at, updated_at, is_admin
 `
 
 type UpdateUserParams struct {
@@ -192,6 +197,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.SubscriptionTier,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsAdmin,
 	)
 	return i, err
 }
