@@ -34,7 +34,7 @@ func setupRoutes(app *fiber.App) {
 	})
 
 	// Public routes
-	app.Get("/:url", routes.ResolveURL)
+	app.Get("/:url", middleware.PasswordProtectionMiddleware, routes.ResolveURL)
 	// URL shortening with optional auth (saves to user account if authenticated)
 	app.Post("/api/v1", middleware.OptionalAuth(), urlService.ShortenURL)
 
@@ -70,6 +70,14 @@ func setupRoutes(app *fiber.App) {
 	api.Get("/urls", middleware.RequireAuth(), tracking.GetAllURLs)
 	api.Delete("/urls/:id", middleware.RequireAuth(), urls.DeleteURL)
 	api.Put("/urls/:id/toggle", middleware.RequireAuth(), urls.ToggleURLStatus)
+
+	// Password protection routes
+	api.Post("/urls/:id/lock", middleware.RequireAuth(), urls.SetURLPassword)
+	api.Delete("/urls/:id/lock", middleware.RequireAuth(), urls.RemoveURLPassword)
+	api.Get("/urls/:shortId/password-stats", middleware.RequireAuth(), urls.GetPasswordStats)
+
+	// Public unlock endpoint (no auth required)
+	app.Post("/api/unlock/:shortId", urls.UnlockURL)
 }
 
 func main() {
