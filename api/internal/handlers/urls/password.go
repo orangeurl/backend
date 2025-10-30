@@ -15,22 +15,41 @@ import (
 func SetURLPassword(c *fiber.Ctx) error {
 	user, err := middleware.GetUserFromContext(c)
 	if err != nil {
+		log.Printf("[SetURLPassword] User not found in context: %v", err)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
 	}
 
+	log.Printf("[SetURLPassword] User ID: %s", user.ID)
+
 	// Check if user has Premium subscription
 	queries := database.GetQueries()
+
+	// Check subscription tier - try subscriptions table first, fallback to user.subscription_tier
+	planTier := user.SubscriptionTier
 	subscription, err := queries.GetUserSubscription(c.Context(), user.ID)
-	if err != nil || strings.ToLower(subscription.PlanID) != "premium" {
+	if err == nil && subscription.PlanID != "" {
+		planTier = subscription.PlanID
+		log.Printf("[SetURLPassword] Using subscription table plan: %s", planTier)
+	} else {
+		log.Printf("[SetURLPassword] No subscription found, using user.subscription_tier: %s", planTier)
+	}
+
+	if strings.ToLower(planTier) != "premium" {
+		log.Printf("[SetURLPassword] User plan '%s' is not premium, denying access", planTier)
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Link locking is a Premium-only feature. Upgrade to Premium to use this feature.",
 			"upgrade_required": true,
 		})
 	}
 
+	log.Printf("[SetURLPassword] User is Premium, proceeding...")
+
 	urlID := c.Params("id")
+	log.Printf("[SetURLPassword] URL ID from params: %s", urlID)
+
 	parsedID, err := uuid.Parse(urlID)
 	if err != nil {
+		log.Printf("[SetURLPassword] Invalid UUID: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid URL ID"})
 	}
 
@@ -40,8 +59,11 @@ func SetURLPassword(c *fiber.Ctx) error {
 
 	body := new(PasswordRequest)
 	if err := c.BodyParser(&body); err != nil {
+		log.Printf("[SetURLPassword] Failed to parse body: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
+
+	log.Printf("[SetURLPassword] Password length: %d", len(body.Password))
 
 	// Validate password
 	if len(body.Password) < 4 {
@@ -55,8 +77,11 @@ func SetURLPassword(c *fiber.Ctx) error {
 	// Verify URL belongs to user
 	urlRecord, err := queries.GetUserURLs(c.Context(), user.ID)
 	if err != nil {
+		log.Printf("[SetURLPassword] Failed to fetch URLs: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch URL"})
 	}
+
+	log.Printf("[SetURLPassword] Found %d URLs for user", len(urlRecord))
 
 	found := false
 	for _, url := range urlRecord {
@@ -67,8 +92,11 @@ func SetURLPassword(c *fiber.Ctx) error {
 	}
 
 	if !found {
+		log.Printf("[SetURLPassword] URL %s not found in user's URLs", parsedID)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
 	}
+
+	log.Printf("[SetURLPassword] URL verified, hashing password...")
 
 	// Hash the password
 	hashedPassword, err := middleware.HashPassword(body.Password)
@@ -76,6 +104,8 @@ func SetURLPassword(c *fiber.Ctx) error {
 		log.Printf("[SetURLPassword] Failed to hash password: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to set password"})
 	}
+
+	log.Printf("[SetURLPassword] Password hashed successfully")
 
 	// Update URL with password
 	updatedURL, err := queries.SetURLPassword(c.Context(), database.SetURLPasswordParams{
@@ -88,6 +118,8 @@ func SetURLPassword(c *fiber.Ctx) error {
 		log.Printf("[SetURLPassword] Failed to update URL: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to set password"})
 	}
+
+	log.Printf("[SetURLPassword] Successfully locked URL %s", updatedURL.ShortID)
 
 	return c.JSON(fiber.Map{
 		"message": "Password protection enabled",
