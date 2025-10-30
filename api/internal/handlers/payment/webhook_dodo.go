@@ -65,44 +65,60 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 		signature = c.Get("Dodo-Signature")
 	}
 
+	log.Printf("[DodoWebhook] ========== NEW WEBHOOK RECEIVED ==========")
+	log.Printf("[DodoWebhook] Headers: %v", c.GetReqHeaders())
+	log.Printf("[DodoWebhook] Signature: %s", signature)
+
 	secret := os.Getenv("DODO_WEBHOOK_SECRET")
 	if secret == "" {
-		log.Printf("DODO_WEBHOOK_SECRET not set, skipping verification for testing")
+		log.Printf("[DodoWebhook] ⚠️  DODO_WEBHOOK_SECRET not set, skipping verification for testing")
 		// For testing, allow without signature verification
 		// In production, this should return an error
 	} else if signature != "" {
 		// Only verify signature if it's provided and secret exists
 		if !verifySignature(raw, signature, secret) {
-			log.Printf("Signature verification failed. Signature: %s, Raw length: %d", signature, len(raw))
+			log.Printf("[DodoWebhook] ❌ Signature verification failed. Signature: %s, Raw length: %d", signature, len(raw))
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid signature"})
 		}
+		log.Printf("[DodoWebhook] ✅ Signature verified successfully")
 	} else {
-		log.Printf("No signature provided, skipping verification for testing")
+		log.Printf("[DodoWebhook] ⚠️  No signature provided, skipping verification for testing")
 	}
 
-	log.Printf("Received webhook payload: %s", string(raw))
+	log.Printf("[DodoWebhook] Payload: %s", string(raw))
 
 	var evt DodoEvent
 	if err := json.Unmarshal(raw, &evt); err != nil {
-		log.Printf("failed to parse webhook: %v", err)
+		log.Printf("[DodoWebhook] ❌ Failed to parse webhook: %v", err)
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "invalid payload"})
 	}
+
+	log.Printf("[DodoWebhook] Event Type: %s", evt.Type)
+	log.Printf("[DodoWebhook] Business ID: %s", evt.BusinessID)
+	log.Printf("[DodoWebhook] Subscription ID: %s", evt.Data.SubscriptionID)
+	log.Printf("[DodoWebhook] Product ID: %s", evt.Data.ProductID)
+	log.Printf("[DodoWebhook] Status: %s", evt.Data.Status)
 
 	queries := database.GetQueries()
 
 	// Extract customer from nested data
 	customerEmail := evt.Data.Customer.Email
 	if customerEmail == "" {
-		log.Printf("No email in customer data")
+		log.Printf("[DodoWebhook] ❌ No email in customer data")
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "missing customer email"})
 	}
 
+	log.Printf("[DodoWebhook] Customer Email: %s", customerEmail)
+	log.Printf("[DodoWebhook] Customer ID: %s", evt.Data.Customer.CustomerID)
+
 	user, err := queries.GetUserByEmail(c.Context(), customerEmail)
 	if err != nil {
-		log.Printf("user not found for email=%s: %v", customerEmail, err)
+		log.Printf("[DodoWebhook] ⚠️  User not found for email=%s: %v", customerEmail, err)
 		// Optional: return 200 to avoid retries if you only create subs post-registration
 		return c.Status(http.StatusOK).JSON(fiber.Map{"message": "user not registered yet"})
 	}
+
+	log.Printf("[DodoWebhook] ✅ Found user: ID=%s, Email=%s", user.ID, user.Email)
 
 	// Get plan info from data
 	planID := evt.Data.ProductID
@@ -119,74 +135,109 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 
 	switch evt.Type {
 	case "subscription.active", "subscription.renewed":
-		// Upsert subscription
-		if _, err := queries.GetUserSubscription(c.Context(), user.ID); err != nil {
-			// create
-			customerID := evt.Data.Customer.CustomerID
-			_, err = queries.CreateSubscription(c.Context(), database.CreateSubscriptionParams{
-				UserID:                 user.ID,
-				PlanID:                 planID,
-				Status:                 "active",
-				DodopaymentsCustomerID: sql.NullString{String: customerID, Valid: customerID != ""},
-			})
-			if err != nil {
-				log.Printf("create subscription failed: %v", err)
-				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "create subscription failed"})
-			}
-		}
-		// update
-		_, err := queries.UpdateSubscription(c.Context(), database.UpdateSubscriptionParams{
-			UserID:             user.ID,
-			PlanID:             planID,
-			Status:             "active",
-			CurrentPeriodStart: sql.NullTime{Time: periodStart, Valid: !periodStart.IsZero()},
-			CurrentPeriodEnd:   sql.NullTime{Time: periodEnd, Valid: !periodEnd.IsZero()},
-		})
-		if err != nil {
-			log.Printf("update subscription failed: %v", err)
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "update subscription failed"})
-		}
+		log.Printf("[DodoWebhook] Processing %s event...", evt.Type)
 
-		// Update user's tier
+		// Determine tier from plan
 		tier := "free"
 		if planName == "pro" || strings.Contains(strings.ToLower(planID), "pro") {
 			tier = "pro"
 		} else if planName == "premium" || strings.Contains(strings.ToLower(planID), "premium") {
 			tier = "premium"
 		}
-		
+		log.Printf("[DodoWebhook] Determined tier: %s (from planID: %s, planName: %s)", tier, planID, planName)
+
+		// Check if subscription exists
+		existingSub, err := queries.GetUserSubscription(c.Context(), user.ID)
+		customerID := evt.Data.Customer.CustomerID
+		subscriptionID := evt.Data.SubscriptionID
+
+		if err != nil {
+			// Subscription doesn't exist, create it
+			log.Printf("[DodoWebhook] Creating new subscription for user %s", user.ID)
+			newSub, createErr := queries.CreateSubscription(c.Context(), database.CreateSubscriptionParams{
+				UserID:                 user.ID,
+				PlanID:                 planName, // Use planName instead of planID
+				Status:                 "active",
+				DodopaymentsCustomerID: sql.NullString{String: customerID, Valid: customerID != ""},
+			})
+			if createErr != nil {
+				log.Printf("[DodoWebhook] ❌ Failed to create subscription: %v", createErr)
+				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "create subscription failed"})
+			}
+			log.Printf("[DodoWebhook] ✅ Created subscription: %s", newSub.ID)
+
+			// Update with DodoPayments IDs
+			_, updateErr := queries.UpdateSubscriptionSetDPIDs(c.Context(), database.UpdateSubscriptionSetDPIDsParams{
+				UserID:                     user.ID,
+				DodopaymentsSubscriptionID: sql.NullString{String: subscriptionID, Valid: subscriptionID != ""},
+				DodopaymentsCustomerID:     sql.NullString{String: customerID, Valid: customerID != ""},
+			})
+			if updateErr != nil {
+				log.Printf("[DodoWebhook] ⚠️  Failed to update DodoPayments IDs: %v", updateErr)
+			} else {
+				log.Printf("[DodoWebhook] ✅ Updated DodoPayments IDs (sub: %s, customer: %s)", subscriptionID, customerID)
+			}
+		} else {
+			log.Printf("[DodoWebhook] Updating existing subscription %s", existingSub.ID)
+		}
+
+		// Update subscription details
+		_, err = queries.UpdateSubscription(c.Context(), database.UpdateSubscriptionParams{
+			UserID:             user.ID,
+			PlanID:             planName, // Use planName instead of planID
+			Status:             "active",
+			CurrentPeriodStart: sql.NullTime{Time: periodStart, Valid: !periodStart.IsZero()},
+			CurrentPeriodEnd:   sql.NullTime{Time: periodEnd, Valid: !periodEnd.IsZero()},
+		})
+		if err != nil {
+			log.Printf("[DodoWebhook] ❌ Failed to update subscription: %v", err)
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "update subscription failed"})
+		}
+		log.Printf("[DodoWebhook] ✅ Updated subscription status to active")
+
+		// Update user's tier
 		if err := queries.UpdateUserSubscriptionTier(c.Context(), database.UpdateUserSubscriptionTierParams{
 			ID:               user.ID,
 			SubscriptionTier: tier,
 		}); err != nil {
-			log.Printf("update user tier failed: %v", err)
+			log.Printf("[DodoWebhook] ❌ Failed to update user tier: %v", err)
 			// continue but log
+		} else {
+			log.Printf("[DodoWebhook] ✅ Updated user tier to: %s", tier)
 		}
 
 	case "subscription.cancelled", "subscription.expired", "subscription.failed":
+		log.Printf("[DodoWebhook] Processing %s event...", evt.Type)
+
 		_, err := queries.UpdateSubscription(c.Context(), database.UpdateSubscriptionParams{
 			UserID:             user.ID,
-			PlanID:             planID,
+			PlanID:             planName,
 			Status:             "cancelled",
 			CurrentPeriodStart: sql.NullTime{Time: periodStart, Valid: !periodStart.IsZero()},
 			CurrentPeriodEnd:   sql.NullTime{Time: periodEnd, Valid: !periodEnd.IsZero()},
 		})
 		if err != nil {
-			log.Printf("cancel/expire update failed: %v", err)
+			log.Printf("[DodoWebhook] ❌ Failed to update subscription to cancelled: %v", err)
+		} else {
+			log.Printf("[DodoWebhook] ✅ Updated subscription status to cancelled")
 		}
+
 		// downgrade user
 		if err := queries.UpdateUserSubscriptionTier(c.Context(), database.UpdateUserSubscriptionTierParams{
 			ID:               user.ID,
 			SubscriptionTier: "free",
 		}); err != nil {
-			log.Printf("downgrade user tier failed: %v", err)
+			log.Printf("[DodoWebhook] ❌ Failed to downgrade user tier: %v", err)
+		} else {
+			log.Printf("[DodoWebhook] ✅ Downgraded user to free tier")
 		}
 
 	default:
-		// No-op for other events
+		log.Printf("[DodoWebhook] ⚠️  Unhandled event type: %s", evt.Type)
 	}
 
-	return c.Status(http.StatusOK).JSON(fiber.Map{"ok": true})
+	log.Printf("[DodoWebhook] ========== WEBHOOK PROCESSED SUCCESSFULLY ==========")
+	return c.Status(http.StatusOK).JSON(fiber.Map{"ok": true, "message": "webhook processed"})
 }
 
 func verifySignature(payload []byte, signature string, secret string) bool {
