@@ -119,6 +119,7 @@ CREATE INDEX idx_bio_page_views_page_id ON bio_page_views(bio_page_id);
 CREATE INDEX idx_bio_page_views_date ON bio_page_views(viewed_at);
 
 -- Function to update updated_at timestamp
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION update_bio_page_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -126,11 +127,14 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
+-- +goose StatementBegin
 CREATE TRIGGER bio_page_updated_at_trigger
 BEFORE UPDATE ON bio_pages
 FOR EACH ROW
 EXECUTE FUNCTION update_bio_page_updated_at();
+-- +goose StatementEnd
 
 -- +goose Down
 DROP TRIGGER IF EXISTS bio_page_updated_at_trigger ON bio_pages;
