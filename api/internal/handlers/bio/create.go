@@ -6,6 +6,8 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
@@ -91,26 +93,34 @@ func CreateBioPage(c *fiber.Ctx) error {
 		req.Links = json.RawMessage(`[]`)
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	// Create bio page
 	bioPage, err := queries.CreateBioPage(c.Context(), database.CreateBioPageParams{
-		UserID:          userID,
+		UserID:          userUUID,
 		Username:        req.Username,
 		DisplayName:     req.DisplayName,
 		Bio:             sql.NullString{String: req.Bio, Valid: req.Bio != ""},
 		AvatarUrl:       sql.NullString{String: req.AvatarURL, Valid: req.AvatarURL != ""},
 		FaviconUrl:      sql.NullString{String: req.FaviconURL, Valid: req.FaviconURL != ""},
-		Theme:           req.Theme,
-		CustomColors:    req.CustomColors,
-		BackgroundType:  req.BackgroundType,
+		Theme:           sql.NullString{String: req.Theme, Valid: req.Theme != ""},
+		CustomColors:    pqtype.NullRawMessage{RawMessage: req.CustomColors, Valid: len(req.CustomColors) > 0},
+		BackgroundType:  sql.NullString{String: req.BackgroundType, Valid: req.BackgroundType != ""},
 		BackgroundValue: sql.NullString{String: req.BackgroundValue, Valid: req.BackgroundValue != ""},
-		ButtonStyle:     req.ButtonStyle,
-		FontFamily:      req.FontFamily,
-		SocialLinks:     req.SocialLinks,
-		Links:           req.Links,
+		ButtonStyle:     sql.NullString{String: req.ButtonStyle, Valid: req.ButtonStyle != ""},
+		FontFamily:      sql.NullString{String: req.FontFamily, Valid: req.FontFamily != ""},
+		SocialLinks:     pqtype.NullRawMessage{RawMessage: req.SocialLinks, Valid: len(req.SocialLinks) > 0},
+		Links:           pqtype.NullRawMessage{RawMessage: req.Links, Valid: len(req.Links) > 0},
 		SeoTitle:        sql.NullString{String: req.SEOTitle, Valid: req.SEOTitle != ""},
 		SeoDescription:  sql.NullString{String: req.SEODescription, Valid: req.SEODescription != ""},
 		OgImageUrl:      sql.NullString{String: req.OGImageURL, Valid: req.OGImageURL != ""},
-		IsPublished:     req.IsPublished,
+		IsPublished:     sql.NullBool{Bool: req.IsPublished, Valid: true},
 	})
 
 	if err != nil {

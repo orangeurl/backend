@@ -6,6 +6,8 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
@@ -44,6 +46,14 @@ func UpdateBioPage(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	var req UpdateBioPageRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -56,11 +66,11 @@ func UpdateBioPage(c *fiber.Ctx) error {
 	// Build update params with null handling
 	params := database.UpdateBioPageParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	}
 
 	if req.DisplayName != nil {
-		params.DisplayName = sql.NullString{String: *req.DisplayName, Valid: true}
+		params.DisplayName = *req.DisplayName
 	}
 	if req.Bio != nil {
 		params.Bio = sql.NullString{String: *req.Bio, Valid: true}
@@ -75,7 +85,7 @@ func UpdateBioPage(c *fiber.Ctx) error {
 		params.Theme = sql.NullString{String: *req.Theme, Valid: true}
 	}
 	if req.CustomColors != nil {
-		params.CustomColors = *req.CustomColors
+		params.CustomColors = pqtype.NullRawMessage{RawMessage: *req.CustomColors, Valid: true}
 	}
 	if req.BackgroundType != nil {
 		params.BackgroundType = sql.NullString{String: *req.BackgroundType, Valid: true}
@@ -90,10 +100,10 @@ func UpdateBioPage(c *fiber.Ctx) error {
 		params.FontFamily = sql.NullString{String: *req.FontFamily, Valid: true}
 	}
 	if req.SocialLinks != nil {
-		params.SocialLinks = *req.SocialLinks
+		params.SocialLinks = pqtype.NullRawMessage{RawMessage: *req.SocialLinks, Valid: true}
 	}
 	if req.Links != nil {
-		params.Links = *req.Links
+		params.Links = pqtype.NullRawMessage{RawMessage: *req.Links, Valid: true}
 	}
 	if req.SEOTitle != nil {
 		params.SeoTitle = sql.NullString{String: *req.SEOTitle, Valid: true}
@@ -140,10 +150,18 @@ func DeleteBioPage(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	queries := database.GetQueries()
-	err := queries.DeleteBioPage(c.Context(), database.DeleteBioPageParams{
+	err = queries.DeleteBioPage(c.Context(), database.DeleteBioPageParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	})
 
 	if err != nil {
@@ -199,10 +217,18 @@ func PublishBioPage(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	queries := database.GetQueries()
 	bioPage, err := queries.PublishBioPage(c.Context(), database.PublishBioPageParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	})
 
 	if err != nil {
@@ -236,10 +262,18 @@ func UnpublishBioPage(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	queries := database.GetQueries()
 	bioPage, err := queries.UnpublishBioPage(c.Context(), database.UnpublishBioPageParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	})
 
 	if err != nil {

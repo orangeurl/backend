@@ -11,6 +11,65 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+type BioLinkClick struct {
+	ID        uuid.UUID
+	BioPageID uuid.UUID
+	LinkID    string
+	IpAddress sql.NullString
+	UserAgent sql.NullString
+	Referer   sql.NullString
+	Country   sql.NullString
+	City      sql.NullString
+	Device    sql.NullString
+	Browser   sql.NullString
+	Os        sql.NullString
+	IsBot     sql.NullBool
+	ClickedAt sql.NullTime
+}
+
+type BioPage struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Username        string
+	DisplayName     string
+	Bio             sql.NullString
+	AvatarUrl       sql.NullString
+	FaviconUrl      sql.NullString
+	Theme           sql.NullString
+	CustomColors    pqtype.NullRawMessage
+	BackgroundType  sql.NullString
+	BackgroundValue sql.NullString
+	ButtonStyle     sql.NullString
+	FontFamily      sql.NullString
+	SocialLinks     pqtype.NullRawMessage
+	Links           pqtype.NullRawMessage
+	SeoTitle        sql.NullString
+	SeoDescription  sql.NullString
+	OgImageUrl      sql.NullString
+	IsPublished     sql.NullBool
+	Subdomain       sql.NullString
+	TotalViews      sql.NullInt32
+	TotalClicks     sql.NullInt32
+	CreatedAt       sql.NullTime
+	UpdatedAt       sql.NullTime
+	LastPublishedAt sql.NullTime
+}
+
+type BioPageView struct {
+	ID        uuid.UUID
+	BioPageID uuid.UUID
+	IpAddress sql.NullString
+	UserAgent sql.NullString
+	Referer   sql.NullString
+	Country   sql.NullString
+	City      sql.NullString
+	Device    sql.NullString
+	Browser   sql.NullString
+	Os        sql.NullString
+	IsBot     sql.NullBool
+	ViewedAt  sql.NullTime
+}
+
 type MonthlyUsage struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID

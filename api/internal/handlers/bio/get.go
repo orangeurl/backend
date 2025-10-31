@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
@@ -47,10 +48,18 @@ func GetBioPageForEdit(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	queries := database.GetQueries()
 	bioPage, err := queries.GetBioPageByUsernameForEdit(c.Context(), database.GetBioPageByUsernameForEditParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	})
 
 	if err != nil {
@@ -75,8 +84,16 @@ func GetUserBioPages(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	queries := database.GetQueries()
-	bioPages, err := queries.GetUserBioPages(c.Context(), userID)
+	bioPages, err := queries.GetUserBioPages(c.Context(), userUUID)
 	if err != nil {
 		log.Printf("Error getting bio pages for user %s: %v", userID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

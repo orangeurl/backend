@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
@@ -70,7 +71,7 @@ func TrackView(c *fiber.Ctx) error {
 		Device:    sql.NullString{String: req.Device, Valid: req.Device != ""},
 		Browser:   sql.NullString{String: req.Browser, Valid: req.Browser != ""},
 		Os:        sql.NullString{String: req.OS, Valid: req.OS != ""},
-		IsBot:     false, // TODO: Implement bot detection
+		IsBot:     sql.NullBool{Bool: false, Valid: true},
 	})
 
 	if err != nil {
@@ -130,7 +131,7 @@ func TrackClick(c *fiber.Ctx) error {
 		Device:    sql.NullString{String: req.Device, Valid: req.Device != ""},
 		Browser:   sql.NullString{String: req.Browser, Valid: req.Browser != ""},
 		Os:        sql.NullString{String: req.OS, Valid: req.OS != ""},
-		IsBot:     false, // TODO: Implement bot detection
+		IsBot:     sql.NullBool{Bool: false, Valid: true},
 	})
 
 	if err != nil {
@@ -193,10 +194,18 @@ func GetAnalytics(c *fiber.Ctx) error {
 
 	queries := database.GetQueries()
 
+	// Parse userID to UUID
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid user ID",
+		})
+	}
+
 	// Get bio page
 	bioPage, err := queries.GetBioPageByUsernameForEdit(c.Context(), database.GetBioPageByUsernameForEditParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	})
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -207,7 +216,7 @@ func GetAnalytics(c *fiber.Ctx) error {
 	// Get overall analytics
 	analytics, err := queries.GetBioPageAnalytics(c.Context(), database.GetBioPageAnalyticsParams{
 		Username: username,
-		UserID:   userID,
+		UserID:   userUUID,
 	})
 	if err != nil {
 		log.Printf("Error getting analytics: %v", err)
@@ -219,8 +228,8 @@ func GetAnalytics(c *fiber.Ctx) error {
 	// Get views by date
 	viewsByDate, err := queries.GetBioPageViewsByDate(c.Context(), database.GetBioPageViewsByDateParams{
 		BioPageID: bioPage.ID,
-		ViewedAt:  startDate,
-		ViewedAt_2: endDate,
+		ViewedAt:  sql.NullTime{Time: startDate, Valid: true},
+		ViewedAt_2: sql.NullTime{Time: endDate, Valid: true},
 	})
 	if err != nil {
 		log.Printf("Error getting views by date: %v", err)
@@ -229,8 +238,8 @@ func GetAnalytics(c *fiber.Ctx) error {
 	// Get clicks by link
 	clicksByLink, err := queries.GetBioLinkClicksByLink(c.Context(), database.GetBioLinkClicksByLinkParams{
 		BioPageID: bioPage.ID,
-		ClickedAt: startDate,
-		ClickedAt_2: endDate,
+		ClickedAt: sql.NullTime{Time: startDate, Valid: true},
+		ClickedAt_2: sql.NullTime{Time: endDate, Valid: true},
 	})
 	if err != nil {
 		log.Printf("Error getting clicks by link: %v", err)
