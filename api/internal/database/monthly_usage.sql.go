@@ -17,8 +17,8 @@ WHERE user_id = $1 AND month = $2
 `
 
 type GetMonthlyUsageParams struct {
-	UserID uuid.UUID
-	Month  string
+	UserID uuid.UUID `json:"user_id"`
+	Month  string    `json:"month"`
 }
 
 func (q *Queries) GetMonthlyUsage(ctx context.Context, arg GetMonthlyUsageParams) (MonthlyUsage, error) {
@@ -46,8 +46,8 @@ RETURNING id, user_id, month, url_count, custom_link_count, qr_code_count, creat
 `
 
 type IncrementCustomLinkCountParams struct {
-	UserID uuid.UUID
-	Month  string
+	UserID uuid.UUID `json:"user_id"`
+	Month  string    `json:"month"`
 }
 
 func (q *Queries) IncrementCustomLinkCount(ctx context.Context, arg IncrementCustomLinkCountParams) (MonthlyUsage, error) {
@@ -75,8 +75,8 @@ RETURNING id, user_id, month, url_count, custom_link_count, qr_code_count, creat
 `
 
 type IncrementQRCodeCountParams struct {
-	UserID uuid.UUID
-	Month  string
+	UserID uuid.UUID `json:"user_id"`
+	Month  string    `json:"month"`
 }
 
 func (q *Queries) IncrementQRCodeCount(ctx context.Context, arg IncrementQRCodeCountParams) (MonthlyUsage, error) {
@@ -104,8 +104,8 @@ RETURNING id, user_id, month, url_count, custom_link_count, qr_code_count, creat
 `
 
 type IncrementURLCountParams struct {
-	UserID uuid.UUID
-	Month  string
+	UserID uuid.UUID `json:"user_id"`
+	Month  string    `json:"month"`
 }
 
 func (q *Queries) IncrementURLCount(ctx context.Context, arg IncrementURLCountParams) (MonthlyUsage, error) {

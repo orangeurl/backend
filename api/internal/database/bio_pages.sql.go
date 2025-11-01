@@ -54,24 +54,24 @@ INSERT INTO bio_pages (
 `
 
 type CreateBioPageParams struct {
-	UserID          uuid.UUID
-	Username        string
-	DisplayName     string
-	Bio             sql.NullString
-	AvatarUrl       sql.NullString
-	FaviconUrl      sql.NullString
-	Theme           sql.NullString
-	CustomColors    pqtype.NullRawMessage
-	BackgroundType  sql.NullString
-	BackgroundValue sql.NullString
-	ButtonStyle     sql.NullString
-	FontFamily      sql.NullString
-	SocialLinks     pqtype.NullRawMessage
-	Links           pqtype.NullRawMessage
-	SeoTitle        sql.NullString
-	SeoDescription  sql.NullString
-	OgImageUrl      sql.NullString
-	IsPublished     sql.NullBool
+	UserID          uuid.UUID             `json:"user_id"`
+	Username        string                `json:"username"`
+	DisplayName     string                `json:"display_name"`
+	Bio             sql.NullString        `json:"bio"`
+	AvatarUrl       sql.NullString        `json:"avatar_url"`
+	FaviconUrl      sql.NullString        `json:"favicon_url"`
+	Theme           sql.NullString        `json:"theme"`
+	CustomColors    pqtype.NullRawMessage `json:"custom_colors"`
+	BackgroundType  sql.NullString        `json:"background_type"`
+	BackgroundValue sql.NullString        `json:"background_value"`
+	ButtonStyle     sql.NullString        `json:"button_style"`
+	FontFamily      sql.NullString        `json:"font_family"`
+	SocialLinks     pqtype.NullRawMessage `json:"social_links"`
+	Links           pqtype.NullRawMessage `json:"links"`
+	SeoTitle        sql.NullString        `json:"seo_title"`
+	SeoDescription  sql.NullString        `json:"seo_description"`
+	OgImageUrl      sql.NullString        `json:"og_image_url"`
+	IsPublished     sql.NullBool          `json:"is_published"`
 }
 
 // Bio Pages CRUD Operations
@@ -133,8 +133,8 @@ WHERE username = $1 AND user_id = $2
 `
 
 type DeleteBioPageParams struct {
-	Username string
-	UserID   uuid.UUID
+	Username string    `json:"username"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) DeleteBioPage(ctx context.Context, arg DeleteBioPageParams) error {
@@ -155,14 +155,14 @@ ORDER BY clicks DESC
 `
 
 type GetBioLinkClicksByLinkParams struct {
-	BioPageID   uuid.UUID
-	ClickedAt   sql.NullTime
-	ClickedAt_2 sql.NullTime
+	BioPageID   uuid.UUID    `json:"bio_page_id"`
+	ClickedAt   sql.NullTime `json:"clicked_at"`
+	ClickedAt_2 sql.NullTime `json:"clicked_at_2"`
 }
 
 type GetBioLinkClicksByLinkRow struct {
-	LinkID string
-	Clicks int64
+	LinkID string `json:"link_id"`
+	Clicks int64  `json:"clicks"`
 }
 
 func (q *Queries) GetBioLinkClicksByLink(ctx context.Context, arg GetBioLinkClicksByLinkParams) ([]GetBioLinkClicksByLinkRow, error) {
@@ -201,15 +201,15 @@ WHERE bp.username = $1 AND bp.user_id = $2
 `
 
 type GetBioPageAnalyticsParams struct {
-	Username string
-	UserID   uuid.UUID
+	Username string    `json:"username"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
 type GetBioPageAnalyticsRow struct {
-	TotalViews      int64
-	TotalClicks     int64
-	UniqueCountries int64
-	UniqueDevices   int64
+	TotalViews      int64 `json:"total_views"`
+	TotalClicks     int64 `json:"total_clicks"`
+	UniqueCountries int64 `json:"unique_countries"`
+	UniqueDevices   int64 `json:"unique_devices"`
 }
 
 func (q *Queries) GetBioPageAnalytics(ctx context.Context, arg GetBioPageAnalyticsParams) (GetBioPageAnalyticsRow, error) {
@@ -235,8 +235,8 @@ ORDER BY count DESC
 `
 
 type GetBioPageBrowserStatsRow struct {
-	Browser sql.NullString
-	Count   int64
+	Browser sql.NullString `json:"browser"`
+	Count   int64          `json:"count"`
 }
 
 func (q *Queries) GetBioPageBrowserStats(ctx context.Context, bioPageID uuid.UUID) ([]GetBioPageBrowserStatsRow, error) {
@@ -306,8 +306,8 @@ WHERE username = $1 AND user_id = $2
 `
 
 type GetBioPageByUsernameForEditParams struct {
-	Username string
-	UserID   uuid.UUID
+	Username string    `json:"username"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) GetBioPageByUsernameForEdit(ctx context.Context, arg GetBioPageByUsernameForEditParams) (BioPage, error) {
@@ -355,8 +355,8 @@ LIMIT 10
 `
 
 type GetBioPageCountryStatsRow struct {
-	Country sql.NullString
-	Count   int64
+	Country sql.NullString `json:"country"`
+	Count   int64          `json:"count"`
 }
 
 func (q *Queries) GetBioPageCountryStats(ctx context.Context, bioPageID uuid.UUID) ([]GetBioPageCountryStatsRow, error) {
@@ -393,8 +393,8 @@ ORDER BY count DESC
 `
 
 type GetBioPageDeviceStatsRow struct {
-	Device sql.NullString
-	Count  int64
+	Device sql.NullString `json:"device"`
+	Count  int64          `json:"count"`
 }
 
 func (q *Queries) GetBioPageDeviceStats(ctx context.Context, bioPageID uuid.UUID) ([]GetBioPageDeviceStatsRow, error) {
@@ -429,8 +429,8 @@ LIMIT $2
 `
 
 type GetBioPageRecentClicksParams struct {
-	BioPageID uuid.UUID
-	Limit     int32
+	BioPageID uuid.UUID `json:"bio_page_id"`
+	Limit     int32     `json:"limit"`
 }
 
 func (q *Queries) GetBioPageRecentClicks(ctx context.Context, arg GetBioPageRecentClicksParams) ([]BioLinkClick, error) {
@@ -479,8 +479,8 @@ LIMIT $2
 `
 
 type GetBioPageRecentViewsParams struct {
-	BioPageID uuid.UUID
-	Limit     int32
+	BioPageID uuid.UUID `json:"bio_page_id"`
+	Limit     int32     `json:"limit"`
 }
 
 func (q *Queries) GetBioPageRecentViews(ctx context.Context, arg GetBioPageRecentViewsParams) ([]BioPageView, error) {
@@ -532,14 +532,14 @@ ORDER BY date DESC
 `
 
 type GetBioPageViewsByDateParams struct {
-	BioPageID  uuid.UUID
-	ViewedAt   sql.NullTime
-	ViewedAt_2 sql.NullTime
+	BioPageID  uuid.UUID    `json:"bio_page_id"`
+	ViewedAt   sql.NullTime `json:"viewed_at"`
+	ViewedAt_2 sql.NullTime `json:"viewed_at_2"`
 }
 
 type GetBioPageViewsByDateRow struct {
-	Date  time.Time
-	Views int64
+	Date  time.Time `json:"date"`
+	Views int64     `json:"views"`
 }
 
 func (q *Queries) GetBioPageViewsByDate(ctx context.Context, arg GetBioPageViewsByDateParams) ([]GetBioPageViewsByDateRow, error) {
@@ -652,8 +652,8 @@ RETURNING id, user_id, username, display_name, bio, avatar_url, favicon_url, the
 `
 
 type PublishBioPageParams struct {
-	Username string
-	UserID   uuid.UUID
+	Username string    `json:"username"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) PublishBioPage(ctx context.Context, arg PublishBioPageParams) (BioPage, error) {
@@ -708,17 +708,17 @@ INSERT INTO bio_link_clicks (
 `
 
 type TrackBioLinkClickParams struct {
-	BioPageID uuid.UUID
-	LinkID    string
-	IpAddress sql.NullString
-	UserAgent sql.NullString
-	Referer   sql.NullString
-	Country   sql.NullString
-	City      sql.NullString
-	Device    sql.NullString
-	Browser   sql.NullString
-	Os        sql.NullString
-	IsBot     sql.NullBool
+	BioPageID uuid.UUID      `json:"bio_page_id"`
+	LinkID    string         `json:"link_id"`
+	IpAddress sql.NullString `json:"ip_address"`
+	UserAgent sql.NullString `json:"user_agent"`
+	Referer   sql.NullString `json:"referer"`
+	Country   sql.NullString `json:"country"`
+	City      sql.NullString `json:"city"`
+	Device    sql.NullString `json:"device"`
+	Browser   sql.NullString `json:"browser"`
+	Os        sql.NullString `json:"os"`
+	IsBot     sql.NullBool   `json:"is_bot"`
 }
 
 func (q *Queries) TrackBioLinkClick(ctx context.Context, arg TrackBioLinkClickParams) (BioLinkClick, error) {
@@ -773,16 +773,16 @@ INSERT INTO bio_page_views (
 `
 
 type TrackBioPageViewParams struct {
-	BioPageID uuid.UUID
-	IpAddress sql.NullString
-	UserAgent sql.NullString
-	Referer   sql.NullString
-	Country   sql.NullString
-	City      sql.NullString
-	Device    sql.NullString
-	Browser   sql.NullString
-	Os        sql.NullString
-	IsBot     sql.NullBool
+	BioPageID uuid.UUID      `json:"bio_page_id"`
+	IpAddress sql.NullString `json:"ip_address"`
+	UserAgent sql.NullString `json:"user_agent"`
+	Referer   sql.NullString `json:"referer"`
+	Country   sql.NullString `json:"country"`
+	City      sql.NullString `json:"city"`
+	Device    sql.NullString `json:"device"`
+	Browser   sql.NullString `json:"browser"`
+	Os        sql.NullString `json:"os"`
+	IsBot     sql.NullBool   `json:"is_bot"`
 }
 
 // Analytics Queries
@@ -825,8 +825,8 @@ RETURNING id, user_id, username, display_name, bio, avatar_url, favicon_url, the
 `
 
 type UnpublishBioPageParams struct {
-	Username string
-	UserID   uuid.UUID
+	Username string    `json:"username"`
+	UserID   uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UnpublishBioPage(ctx context.Context, arg UnpublishBioPageParams) (BioPage, error) {
@@ -887,24 +887,24 @@ RETURNING id, user_id, username, display_name, bio, avatar_url, favicon_url, the
 `
 
 type UpdateBioPageParams struct {
-	Username        string
-	DisplayName     string
-	Bio             sql.NullString
-	AvatarUrl       sql.NullString
-	FaviconUrl      sql.NullString
-	Theme           sql.NullString
-	CustomColors    pqtype.NullRawMessage
-	BackgroundType  sql.NullString
-	BackgroundValue sql.NullString
-	ButtonStyle     sql.NullString
-	FontFamily      sql.NullString
-	SocialLinks     pqtype.NullRawMessage
-	Links           pqtype.NullRawMessage
-	SeoTitle        sql.NullString
-	SeoDescription  sql.NullString
-	OgImageUrl      sql.NullString
-	IsPublished     sql.NullBool
-	UserID          uuid.UUID
+	Username        string                `json:"username"`
+	DisplayName     string                `json:"display_name"`
+	Bio             sql.NullString        `json:"bio"`
+	AvatarUrl       sql.NullString        `json:"avatar_url"`
+	FaviconUrl      sql.NullString        `json:"favicon_url"`
+	Theme           sql.NullString        `json:"theme"`
+	CustomColors    pqtype.NullRawMessage `json:"custom_colors"`
+	BackgroundType  sql.NullString        `json:"background_type"`
+	BackgroundValue sql.NullString        `json:"background_value"`
+	ButtonStyle     sql.NullString        `json:"button_style"`
+	FontFamily      sql.NullString        `json:"font_family"`
+	SocialLinks     pqtype.NullRawMessage `json:"social_links"`
+	Links           pqtype.NullRawMessage `json:"links"`
+	SeoTitle        sql.NullString        `json:"seo_title"`
+	SeoDescription  sql.NullString        `json:"seo_description"`
+	OgImageUrl      sql.NullString        `json:"og_image_url"`
+	IsPublished     sql.NullBool          `json:"is_published"`
+	UserID          uuid.UUID             `json:"user_id"`
 }
 
 func (q *Queries) UpdateBioPage(ctx context.Context, arg UpdateBioPageParams) (BioPage, error) {

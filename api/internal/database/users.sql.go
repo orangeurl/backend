@@ -19,11 +19,11 @@ RETURNING id, clerk_id, email, first_name, last_name, avatar_url, subscription_t
 `
 
 type CreateUserParams struct {
-	ClerkID   string
-	Email     string
-	FirstName string
-	LastName  string
-	AvatarUrl sql.NullString
+	ClerkID   string         `json:"clerk_id"`
+	Email     string         `json:"email"`
+	FirstName string         `json:"first_name"`
+	LastName  string         `json:"last_name"`
+	AvatarUrl sql.NullString `json:"avatar_url"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -171,11 +171,11 @@ RETURNING id, clerk_id, email, first_name, last_name, avatar_url, subscription_t
 `
 
 type UpdateUserParams struct {
-	ClerkID   string
-	Email     string
-	FirstName string
-	LastName  string
-	AvatarUrl sql.NullString
+	ClerkID   string         `json:"clerk_id"`
+	Email     string         `json:"email"`
+	FirstName string         `json:"first_name"`
+	LastName  string         `json:"last_name"`
+	AvatarUrl sql.NullString `json:"avatar_url"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -208,8 +208,8 @@ WHERE id = $1
 `
 
 type UpdateUserSubscriptionTierParams struct {
-	ID               uuid.UUID
-	SubscriptionTier string
+	ID               uuid.UUID `json:"id"`
+	SubscriptionTier string    `json:"subscription_tier"`
 }
 
 func (q *Queries) UpdateUserSubscriptionTier(ctx context.Context, arg UpdateUserSubscriptionTierParams) error {

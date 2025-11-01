@@ -19,10 +19,10 @@ RETURNING id, user_id, plan_id, status, current_period_start, current_period_end
 `
 
 type CreateSubscriptionParams struct {
-	UserID                 uuid.UUID
-	PlanID                 string
-	Status                 string
-	DodopaymentsCustomerID sql.NullString
+	UserID                 uuid.UUID      `json:"user_id"`
+	PlanID                 string         `json:"plan_id"`
+	Status                 string         `json:"status"`
+	DodopaymentsCustomerID sql.NullString `json:"dodopayments_customer_id"`
 }
 
 func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscriptionParams) (Subscription, error) {
@@ -125,11 +125,11 @@ RETURNING id, user_id, plan_id, status, current_period_start, current_period_end
 `
 
 type UpdateSubscriptionParams struct {
-	UserID             uuid.UUID
-	PlanID             string
-	Status             string
-	CurrentPeriodStart sql.NullTime
-	CurrentPeriodEnd   sql.NullTime
+	UserID             uuid.UUID    `json:"user_id"`
+	PlanID             string       `json:"plan_id"`
+	Status             string       `json:"status"`
+	CurrentPeriodStart sql.NullTime `json:"current_period_start"`
+	CurrentPeriodEnd   sql.NullTime `json:"current_period_end"`
 }
 
 func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscriptionParams) (Subscription, error) {
@@ -170,9 +170,9 @@ RETURNING id, user_id, plan_id, status, current_period_start, current_period_end
 `
 
 type UpdateSubscriptionSetDPIDsParams struct {
-	UserID                     uuid.UUID
-	DodopaymentsSubscriptionID sql.NullString
-	DodopaymentsCustomerID     sql.NullString
+	UserID                     uuid.UUID      `json:"user_id"`
+	DodopaymentsSubscriptionID sql.NullString `json:"dodopayments_subscription_id"`
+	DodopaymentsCustomerID     sql.NullString `json:"dodopayments_customer_id"`
 }
 
 func (q *Queries) UpdateSubscriptionSetDPIDs(ctx context.Context, arg UpdateSubscriptionSetDPIDsParams) (Subscription, error) {

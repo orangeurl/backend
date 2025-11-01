@@ -12,136 +12,136 @@ import (
 )
 
 type BioLinkClick struct {
-	ID        uuid.UUID
-	BioPageID uuid.UUID
-	LinkID    string
-	IpAddress sql.NullString
-	UserAgent sql.NullString
-	Referer   sql.NullString
-	Country   sql.NullString
-	City      sql.NullString
-	Device    sql.NullString
-	Browser   sql.NullString
-	Os        sql.NullString
-	IsBot     sql.NullBool
-	ClickedAt sql.NullTime
+	ID        uuid.UUID      `json:"id"`
+	BioPageID uuid.UUID      `json:"bio_page_id"`
+	LinkID    string         `json:"link_id"`
+	IpAddress sql.NullString `json:"ip_address"`
+	UserAgent sql.NullString `json:"user_agent"`
+	Referer   sql.NullString `json:"referer"`
+	Country   sql.NullString `json:"country"`
+	City      sql.NullString `json:"city"`
+	Device    sql.NullString `json:"device"`
+	Browser   sql.NullString `json:"browser"`
+	Os        sql.NullString `json:"os"`
+	IsBot     sql.NullBool   `json:"is_bot"`
+	ClickedAt sql.NullTime   `json:"clicked_at"`
 }
 
 type BioPage struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Username        string
-	DisplayName     string
-	Bio             sql.NullString
-	AvatarUrl       sql.NullString
-	FaviconUrl      sql.NullString
-	Theme           sql.NullString
-	CustomColors    pqtype.NullRawMessage
-	BackgroundType  sql.NullString
-	BackgroundValue sql.NullString
-	ButtonStyle     sql.NullString
-	FontFamily      sql.NullString
-	SocialLinks     pqtype.NullRawMessage
-	Links           pqtype.NullRawMessage
-	SeoTitle        sql.NullString
-	SeoDescription  sql.NullString
-	OgImageUrl      sql.NullString
-	IsPublished     sql.NullBool
-	Subdomain       sql.NullString
-	TotalViews      sql.NullInt32
-	TotalClicks     sql.NullInt32
-	CreatedAt       sql.NullTime
-	UpdatedAt       sql.NullTime
-	LastPublishedAt sql.NullTime
+	ID              uuid.UUID             `json:"id"`
+	UserID          uuid.UUID             `json:"user_id"`
+	Username        string                `json:"username"`
+	DisplayName     string                `json:"display_name"`
+	Bio             sql.NullString        `json:"bio"`
+	AvatarUrl       sql.NullString        `json:"avatar_url"`
+	FaviconUrl      sql.NullString        `json:"favicon_url"`
+	Theme           sql.NullString        `json:"theme"`
+	CustomColors    pqtype.NullRawMessage `json:"custom_colors"`
+	BackgroundType  sql.NullString        `json:"background_type"`
+	BackgroundValue sql.NullString        `json:"background_value"`
+	ButtonStyle     sql.NullString        `json:"button_style"`
+	FontFamily      sql.NullString        `json:"font_family"`
+	SocialLinks     pqtype.NullRawMessage `json:"social_links"`
+	Links           pqtype.NullRawMessage `json:"links"`
+	SeoTitle        sql.NullString        `json:"seo_title"`
+	SeoDescription  sql.NullString        `json:"seo_description"`
+	OgImageUrl      sql.NullString        `json:"og_image_url"`
+	IsPublished     sql.NullBool          `json:"is_published"`
+	Subdomain       sql.NullString        `json:"subdomain"`
+	TotalViews      sql.NullInt32         `json:"total_views"`
+	TotalClicks     sql.NullInt32         `json:"total_clicks"`
+	CreatedAt       sql.NullTime          `json:"created_at"`
+	UpdatedAt       sql.NullTime          `json:"updated_at"`
+	LastPublishedAt sql.NullTime          `json:"last_published_at"`
 }
 
 type BioPageView struct {
-	ID        uuid.UUID
-	BioPageID uuid.UUID
-	IpAddress sql.NullString
-	UserAgent sql.NullString
-	Referer   sql.NullString
-	Country   sql.NullString
-	City      sql.NullString
-	Device    sql.NullString
-	Browser   sql.NullString
-	Os        sql.NullString
-	IsBot     sql.NullBool
-	ViewedAt  sql.NullTime
+	ID        uuid.UUID      `json:"id"`
+	BioPageID uuid.UUID      `json:"bio_page_id"`
+	IpAddress sql.NullString `json:"ip_address"`
+	UserAgent sql.NullString `json:"user_agent"`
+	Referer   sql.NullString `json:"referer"`
+	Country   sql.NullString `json:"country"`
+	City      sql.NullString `json:"city"`
+	Device    sql.NullString `json:"device"`
+	Browser   sql.NullString `json:"browser"`
+	Os        sql.NullString `json:"os"`
+	IsBot     sql.NullBool   `json:"is_bot"`
+	ViewedAt  sql.NullTime   `json:"viewed_at"`
 }
 
 type MonthlyUsage struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Month           string
-	UrlCount        int32
-	CustomLinkCount int32
-	QrCodeCount     int32
-	CreatedAt       sql.NullTime
-	UpdatedAt       sql.NullTime
+	ID              uuid.UUID    `json:"id"`
+	UserID          uuid.UUID    `json:"user_id"`
+	Month           string       `json:"month"`
+	UrlCount        int32        `json:"url_count"`
+	CustomLinkCount int32        `json:"custom_link_count"`
+	QrCodeCount     int32        `json:"qr_code_count"`
+	CreatedAt       sql.NullTime `json:"created_at"`
+	UpdatedAt       sql.NullTime `json:"updated_at"`
 }
 
 type Subscription struct {
-	ID                         uuid.UUID
-	UserID                     uuid.UUID
-	PlanID                     string
-	Status                     string
-	CurrentPeriodStart         sql.NullTime
-	CurrentPeriodEnd           sql.NullTime
-	DodopaymentsSubscriptionID sql.NullString
-	DodopaymentsCustomerID     sql.NullString
-	CreatedAt                  sql.NullTime
-	UpdatedAt                  sql.NullTime
-	BillingInterval            sql.NullString
-	CancelAtPeriodEnd          sql.NullBool
-	Currency                   sql.NullString
+	ID                         uuid.UUID      `json:"id"`
+	UserID                     uuid.UUID      `json:"user_id"`
+	PlanID                     string         `json:"plan_id"`
+	Status                     string         `json:"status"`
+	CurrentPeriodStart         sql.NullTime   `json:"current_period_start"`
+	CurrentPeriodEnd           sql.NullTime   `json:"current_period_end"`
+	DodopaymentsSubscriptionID sql.NullString `json:"dodopayments_subscription_id"`
+	DodopaymentsCustomerID     sql.NullString `json:"dodopayments_customer_id"`
+	CreatedAt                  sql.NullTime   `json:"created_at"`
+	UpdatedAt                  sql.NullTime   `json:"updated_at"`
+	BillingInterval            sql.NullString `json:"billing_interval"`
+	CancelAtPeriodEnd          sql.NullBool   `json:"cancel_at_period_end"`
+	Currency                   sql.NullString `json:"currency"`
 }
 
 type Url struct {
-	ID                  uuid.UUID
-	UserID              uuid.UUID
-	ShortID             string
-	OriginalUrl         string
-	Expiry              sql.NullTime
-	IsActive            sql.NullBool
-	CreatedAt           sql.NullTime
-	UpdatedAt           sql.NullTime
-	PasswordHash        sql.NullString
-	IsLocked            sql.NullBool
-	PasswordAttempts    sql.NullInt32
-	LastPasswordAttempt sql.NullTime
+	ID                  uuid.UUID      `json:"id"`
+	UserID              uuid.UUID      `json:"user_id"`
+	ShortID             string         `json:"short_id"`
+	OriginalUrl         string         `json:"original_url"`
+	Expiry              sql.NullTime   `json:"expiry"`
+	IsActive            sql.NullBool   `json:"is_active"`
+	CreatedAt           sql.NullTime   `json:"created_at"`
+	UpdatedAt           sql.NullTime   `json:"updated_at"`
+	PasswordHash        sql.NullString `json:"password_hash"`
+	IsLocked            sql.NullBool   `json:"is_locked"`
+	PasswordAttempts    sql.NullInt32  `json:"password_attempts"`
+	LastPasswordAttempt sql.NullTime   `json:"last_password_attempt"`
 }
 
 type UrlClick struct {
-	ID         uuid.UUID
-	UrlID      uuid.UUID
-	IpAddress  pqtype.Inet
-	UserAgent  sql.NullString
-	Referer    sql.NullString
-	Country    sql.NullString
-	City       sql.NullString
-	DeviceType sql.NullString
-	Browser    sql.NullString
-	Os         sql.NullString
-	IsBot      sql.NullBool
-	ClickedAt  sql.NullTime
+	ID         uuid.UUID      `json:"id"`
+	UrlID      uuid.UUID      `json:"url_id"`
+	IpAddress  pqtype.Inet    `json:"ip_address"`
+	UserAgent  sql.NullString `json:"user_agent"`
+	Referer    sql.NullString `json:"referer"`
+	Country    sql.NullString `json:"country"`
+	City       sql.NullString `json:"city"`
+	DeviceType sql.NullString `json:"device_type"`
+	Browser    sql.NullString `json:"browser"`
+	Os         sql.NullString `json:"os"`
+	IsBot      sql.NullBool   `json:"is_bot"`
+	ClickedAt  sql.NullTime   `json:"clicked_at"`
 }
 
 type User struct {
-	ID               uuid.UUID
-	ClerkID          string
-	Email            string
-	FirstName        string
-	LastName         string
-	AvatarUrl        sql.NullString
-	SubscriptionTier string
-	CreatedAt        sql.NullTime
-	UpdatedAt        sql.NullTime
-	IsAdmin          sql.NullBool
+	ID               uuid.UUID      `json:"id"`
+	ClerkID          string         `json:"clerk_id"`
+	Email            string         `json:"email"`
+	FirstName        string         `json:"first_name"`
+	LastName         string         `json:"last_name"`
+	AvatarUrl        sql.NullString `json:"avatar_url"`
+	SubscriptionTier string         `json:"subscription_tier"`
+	CreatedAt        sql.NullTime   `json:"created_at"`
+	UpdatedAt        sql.NullTime   `json:"updated_at"`
+	IsAdmin          sql.NullBool   `json:"is_admin"`
 }
 
 type Waitlist struct {
-	ID        uuid.UUID
-	Email     string
-	CreatedAt sql.NullTime
+	ID        uuid.UUID    `json:"id"`
+	Email     string       `json:"email"`
+	CreatedAt sql.NullTime `json:"created_at"`
 }

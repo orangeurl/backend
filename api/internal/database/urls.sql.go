@@ -19,13 +19,13 @@ RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, up
 `
 
 type CreateURLParams struct {
-	UserID       uuid.UUID
-	ShortID      string
-	OriginalUrl  string
-	Expiry       sql.NullTime
-	IsActive     sql.NullBool
-	PasswordHash sql.NullString
-	IsLocked     sql.NullBool
+	UserID       uuid.UUID      `json:"user_id"`
+	ShortID      string         `json:"short_id"`
+	OriginalUrl  string         `json:"original_url"`
+	Expiry       sql.NullTime   `json:"expiry"`
+	IsActive     sql.NullBool   `json:"is_active"`
+	PasswordHash sql.NullString `json:"password_hash"`
+	IsLocked     sql.NullBool   `json:"is_locked"`
 }
 
 func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, error) {
@@ -61,8 +61,8 @@ UPDATE urls SET is_active = FALSE WHERE id = $1 AND user_id = $2
 `
 
 type DeleteURLParams struct {
-	ID     uuid.UUID
-	UserID uuid.UUID
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) DeleteURL(ctx context.Context, arg DeleteURLParams) error {
@@ -243,9 +243,9 @@ RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, up
 `
 
 type SetURLPasswordParams struct {
-	ID           uuid.UUID
-	PasswordHash sql.NullString
-	IsLocked     sql.NullBool
+	ID           uuid.UUID      `json:"id"`
+	PasswordHash sql.NullString `json:"password_hash"`
+	IsLocked     sql.NullBool   `json:"is_locked"`
 }
 
 func (q *Queries) SetURLPassword(ctx context.Context, arg SetURLPasswordParams) (Url, error) {
@@ -276,10 +276,10 @@ RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, up
 `
 
 type UpdateURLParams struct {
-	ID          uuid.UUID
-	OriginalUrl string
-	Expiry      sql.NullTime
-	IsActive    sql.NullBool
+	ID          uuid.UUID    `json:"id"`
+	OriginalUrl string       `json:"original_url"`
+	Expiry      sql.NullTime `json:"expiry"`
+	IsActive    sql.NullBool `json:"is_active"`
 }
 
 func (q *Queries) UpdateURL(ctx context.Context, arg UpdateURLParams) (Url, error) {

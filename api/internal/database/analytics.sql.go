@@ -21,16 +21,16 @@ RETURNING id, url_id, ip_address, user_agent, referer, country, city, device_typ
 `
 
 type CreateClickParams struct {
-	UrlID      uuid.UUID
-	IpAddress  pqtype.Inet
-	UserAgent  sql.NullString
-	Referer    sql.NullString
-	Country    sql.NullString
-	City       sql.NullString
-	DeviceType sql.NullString
-	Browser    sql.NullString
-	Os         sql.NullString
-	IsBot      sql.NullBool
+	UrlID      uuid.UUID      `json:"url_id"`
+	IpAddress  pqtype.Inet    `json:"ip_address"`
+	UserAgent  sql.NullString `json:"user_agent"`
+	Referer    sql.NullString `json:"referer"`
+	Country    sql.NullString `json:"country"`
+	City       sql.NullString `json:"city"`
+	DeviceType sql.NullString `json:"device_type"`
+	Browser    sql.NullString `json:"browser"`
+	Os         sql.NullString `json:"os"`
+	IsBot      sql.NullBool   `json:"is_bot"`
 }
 
 func (q *Queries) CreateClick(ctx context.Context, arg CreateClickParams) (UrlClick, error) {
@@ -116,8 +116,8 @@ ORDER BY clicks DESC
 `
 
 type GetURLClicksByBrowserRow struct {
-	Browser sql.NullString
-	Clicks  int64
+	Browser sql.NullString `json:"browser"`
+	Clicks  int64          `json:"clicks"`
 }
 
 func (q *Queries) GetURLClicksByBrowser(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByBrowserRow, error) {
@@ -154,8 +154,8 @@ ORDER BY date DESC
 `
 
 type GetURLClicksByDateRow struct {
-	Date   time.Time
-	Clicks int64
+	Date   time.Time `json:"date"`
+	Clicks int64     `json:"clicks"`
 }
 
 func (q *Queries) GetURLClicksByDate(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByDateRow, error) {
@@ -192,8 +192,8 @@ ORDER BY clicks DESC
 `
 
 type GetURLClicksByDeviceRow struct {
-	DeviceType sql.NullString
-	Clicks     int64
+	DeviceType sql.NullString `json:"device_type"`
+	Clicks     int64          `json:"clicks"`
 }
 
 func (q *Queries) GetURLClicksByDevice(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByDeviceRow, error) {
@@ -231,9 +231,9 @@ ORDER BY date DESC, clicks DESC
 `
 
 type GetURLClicksByReferrerAndDateRow struct {
-	Date    time.Time
-	Referer sql.NullString
-	Clicks  int64
+	Date    time.Time      `json:"date"`
+	Referer sql.NullString `json:"referer"`
+	Clicks  int64          `json:"clicks"`
 }
 
 func (q *Queries) GetURLClicksByReferrerAndDate(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByReferrerAndDateRow, error) {
@@ -314,10 +314,10 @@ WHERE u.user_id = $1
 `
 
 type GetUserClickStatsRow struct {
-	TotalClicks       int64
-	UniqueUrlsClicked int64
-	UniqueCountries   int64
-	UniqueCities      int64
+	TotalClicks       int64 `json:"total_clicks"`
+	UniqueUrlsClicked int64 `json:"unique_urls_clicked"`
+	UniqueCountries   int64 `json:"unique_countries"`
+	UniqueCities      int64 `json:"unique_cities"`
 }
 
 func (q *Queries) GetUserClickStats(ctx context.Context, userID uuid.UUID) (GetUserClickStatsRow, error) {
@@ -345,8 +345,8 @@ LIMIT 10
 `
 
 type GetUserClicksByBrowserRow struct {
-	Browser sql.NullString
-	Clicks  int64
+	Browser sql.NullString `json:"browser"`
+	Clicks  int64          `json:"clicks"`
 }
 
 func (q *Queries) GetUserClicksByBrowser(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByBrowserRow, error) {
@@ -385,8 +385,8 @@ LIMIT 10
 `
 
 type GetUserClicksByCountryRow struct {
-	Country sql.NullString
-	Clicks  int64
+	Country sql.NullString `json:"country"`
+	Clicks  int64          `json:"clicks"`
 }
 
 func (q *Queries) GetUserClicksByCountry(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByCountryRow, error) {
@@ -425,8 +425,8 @@ LIMIT 30
 `
 
 type GetUserClicksByDateRow struct {
-	Date   time.Time
-	Clicks int64
+	Date   time.Time `json:"date"`
+	Clicks int64     `json:"clicks"`
 }
 
 func (q *Queries) GetUserClicksByDate(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByDateRow, error) {
@@ -464,8 +464,8 @@ ORDER BY clicks DESC
 `
 
 type GetUserClicksByDeviceRow struct {
-	DeviceType sql.NullString
-	Clicks     int64
+	DeviceType sql.NullString `json:"device_type"`
+	Clicks     int64          `json:"clicks"`
 }
 
 func (q *Queries) GetUserClicksByDevice(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByDeviceRow, error) {
