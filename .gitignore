@@ -1,3 +1,9 @@
 api/.env
 data/
 postgres-data/
+api/cmd/server/main
+api/main
+*.exe
+*.dll
+*.so
+*.dylib

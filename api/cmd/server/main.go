@@ -112,7 +112,14 @@ func main() {
 
 	app := fiber.New()
 	app.Use(logger.New())
-	app.Use(cors.New())
+
+	// CORS configuration
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "https://app.orangeurl.live,https://orangeurl.live,http://localhost:3001,http://localhost:3000",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+		AllowCredentials: true,
+	}))
 
 	setupRoutes(app)
 
