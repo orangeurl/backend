@@ -129,6 +129,6 @@ func CreateBioPage(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message":  "Bio page created successfully",
-		"bio_page": bioPage,
+		"bio_page": ConvertBioPageToResponse(bioPage),
 	})
 }

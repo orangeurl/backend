@@ -27,7 +27,7 @@ func GetBioPage(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"bio_page": bioPage,
+		"bio_page": ConvertBioPageToResponse(bioPage),
 	})
 }
 
@@ -70,7 +70,7 @@ func GetBioPageForEdit(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"bio_page": bioPage,
+		"bio_page": ConvertBioPageToResponse(bioPage),
 	})
 }
 
@@ -102,8 +102,14 @@ func GetUserBioPages(c *fiber.Ctx) error {
 		})
 	}
 
+	// Convert all bio pages to response DTOs
+	bioPageResponses := make([]BioPageResponse, len(bioPages))
+	for i, bp := range bioPages {
+		bioPageResponses[i] = ConvertBioPageToResponse(bp)
+	}
+
 	return c.JSON(fiber.Map{
-		"bio_pages": bioPages,
-		"count":     len(bioPages),
+		"bio_pages": bioPageResponses,
+		"count":     len(bioPageResponses),
 	})
 }

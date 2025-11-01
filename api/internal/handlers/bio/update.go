@@ -115,7 +115,7 @@ func UpdateBioPage(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":  "Bio page updated successfully",
-		"bio_page": bioPage,
+		"bio_page": ConvertBioPageToResponse(bioPage),
 	})
 }
 
@@ -227,7 +227,7 @@ func PublishBioPage(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":  "Bio page published successfully",
-		"bio_page": bioPage,
+		"bio_page": ConvertBioPageToResponse(bioPage),
 	})
 }
 
@@ -272,6 +272,6 @@ func UnpublishBioPage(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message":  "Bio page unpublished successfully",
-		"bio_page": bioPage,
+		"bio_page": ConvertBioPageToResponse(bioPage),
 	})
 }
