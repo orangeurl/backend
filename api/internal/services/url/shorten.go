@@ -21,6 +21,7 @@ type request struct {
 	CustomShort  string        `json:"short"`
 	Expiry       time.Duration `json:"expiry"`
 	CustomExpiry *time.Time    `json:"custom_expiry"` // Premium feature - specific expiry date
+	Password     string        `json:"password"`      // Premium feature - password protection
 }
 
 type response struct {
@@ -230,14 +231,33 @@ func ShortenURL(c *fiber.Ctx) error {
 			}
 		}
 
+		// Handle password protection (Premium feature)
+		var passwordHash sql.NullString
+		var isLocked sql.NullBool
+		
+		if body.Password != "" && tier == "premium" {
+			// Hash the password using bcrypt
+			hashedPassword, hashErr := middleware.HashPassword(body.Password)
+			if hashErr != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to secure password",
+				})
+			}
+			passwordHash = sql.NullString{String: hashedPassword, Valid: true}
+			isLocked = sql.NullBool{Bool: true, Valid: true}
+		} else {
+			passwordHash = sql.NullString{Valid: false}
+			isLocked = sql.NullBool{Bool: false, Valid: true}
+		}
+
 		_, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
 			UserID:       user.ID,
 			ShortID:      id,
 			OriginalUrl:  body.URL,
 			Expiry:       expiryTime,
 			IsActive:     sql.NullBool{Bool: true, Valid: true},
-			PasswordHash: sql.NullString{Valid: false}, // No password by default
-			IsLocked:     sql.NullBool{Bool: false, Valid: true},
+			PasswordHash: passwordHash,
+			IsLocked:     isLocked,
 		})
 
 		if pgErr != nil {
