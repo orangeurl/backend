@@ -32,7 +32,7 @@ type UpdateBioPageRequest struct {
 
 func UpdateBioPage(c *fiber.Ctx) error {
 	username := c.Params("username")
-	userID := c.Locals("userId").(string)
+	userID := c.Locals("user_id").(uuid.UUID).String()
 
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -136,7 +136,7 @@ func UpdateBioPage(c *fiber.Ctx) error {
 
 func DeleteBioPage(c *fiber.Ctx) error {
 	username := c.Params("username")
-	userID := c.Locals("userId").(string)
+	userID := c.Locals("user_id").(uuid.UUID).String()
 
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -203,7 +203,7 @@ func CheckUsernameAvailability(c *fiber.Ctx) error {
 
 func PublishBioPage(c *fiber.Ctx) error {
 	username := c.Params("username")
-	userID := c.Locals("userId").(string)
+	userID := c.Locals("user_id").(uuid.UUID).String()
 
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -248,7 +248,7 @@ func PublishBioPage(c *fiber.Ctx) error {
 
 func UnpublishBioPage(c *fiber.Ctx) error {
 	username := c.Params("username")
-	userID := c.Locals("userId").(string)
+	userID := c.Locals("user_id").(uuid.UUID).String()
 
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

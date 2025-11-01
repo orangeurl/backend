@@ -33,12 +33,13 @@ type CreateBioPageRequest struct {
 
 func CreateBioPage(c *fiber.Ctx) error {
 	// Get user ID from context (set by auth middleware)
-	userID := c.Locals("userId").(string)
-	if userID == "" {
+	userUUID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
 		})
 	}
+	userID := userUUID.String()
 
 	var req CreateBioPageRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -93,13 +94,7 @@ func CreateBioPage(c *fiber.Ctx) error {
 		req.Links = json.RawMessage(`[]`)
 	}
 
-	// Parse userID to UUID
-	userUUID, err := uuid.Parse(userID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid user ID",
-		})
-	}
+	// userUUID is already a UUID from Locals, no need to parse
 
 	// Create bio page
 	bioPage, err := queries.CreateBioPage(c.Context(), database.CreateBioPageParams{

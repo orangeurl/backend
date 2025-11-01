@@ -149,7 +149,7 @@ func TrackClick(c *fiber.Ctx) error {
 // GetAnalytics - Get analytics for a bio page (requires auth)
 func GetAnalytics(c *fiber.Ctx) error {
 	username := c.Params("username")
-	userID := c.Locals("userId").(string)
+	userID := c.Locals("user_id").(uuid.UUID).String()
 
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

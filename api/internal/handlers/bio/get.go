@@ -34,7 +34,7 @@ func GetBioPage(c *fiber.Ctx) error {
 // GetBioPageForEdit - Get bio page for editing (requires auth)
 func GetBioPageForEdit(c *fiber.Ctx) error {
 	username := c.Params("username")
-	userID := c.Locals("userId").(string)
+	userID := c.Locals("user_id").(uuid.UUID).String()
 
 	if username == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -76,16 +76,17 @@ func GetBioPageForEdit(c *fiber.Ctx) error {
 
 // GetUserBioPages - Get all bio pages for the authenticated user
 func GetUserBioPages(c *fiber.Ctx) error {
-	userID := c.Locals("userId").(string)
-
-	if userID == "" {
+	userUUID, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
 		})
 	}
 
-	// Parse userID to UUID
-	userUUID, err := uuid.Parse(userID)
+	userID := userUUID.String()
+
+	// userUUID is already a UUID, no need to parse
+	err := error(nil)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid user ID",
