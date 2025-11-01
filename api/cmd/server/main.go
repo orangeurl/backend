@@ -13,7 +13,6 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/database"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/analytics"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/auth"
-	"github.com/xenonnn4w/orangeurl/internal/handlers/bio"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/dashboard"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/payment"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
@@ -79,23 +78,6 @@ func setupRoutes(app *fiber.App) {
 
 	// Public unlock endpoint (no auth required)
 	app.Post("/api/unlock/:shortId", urls.UnlockURL)
-
-	// Bio Pages Routes
-	// Public routes (no auth required)
-	api.Get("/bio/:username", bio.GetBioPage)                    // Get published bio page
-	api.Post("/bio/:username/view", bio.TrackView)              // Track page view
-	api.Post("/bio/:username/click", bio.TrackClick)            // Track link click
-	api.Get("/bio/check/:username", bio.CheckUsernameAvailability) // Check username availability
-
-	// Protected routes (require auth)
-	api.Post("/bio", middleware.RequireAuth(), bio.CreateBioPage)                             // Create bio page
-	api.Get("/dashboard/bio", middleware.RequireAuth(), bio.GetUserBioPages)                  // Get user's bio pages
-	api.Get("/dashboard/bio/:username", middleware.RequireAuth(), bio.GetBioPageForEdit)      // Get bio page for editing
-	api.Put("/bio/:username", middleware.RequireAuth(), bio.UpdateBioPage)                    // Update bio page
-	api.Delete("/bio/:username", middleware.RequireAuth(), bio.DeleteBioPage)                 // Delete bio page
-	api.Put("/bio/:username/publish", middleware.RequireAuth(), bio.PublishBioPage)           // Publish bio page
-	api.Put("/bio/:username/unpublish", middleware.RequireAuth(), bio.UnpublishBioPage)       // Unpublish bio page
-	api.Get("/dashboard/bio/:username/analytics", middleware.RequireAuth(), bio.GetAnalytics) // Get analytics
 }
 
 func main() {
