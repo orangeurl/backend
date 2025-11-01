@@ -12,22 +12,24 @@ import (
 )
 
 type UpdateBioPageRequest struct {
-	DisplayName     *string          `json:"display_name"`
+	ID              string           `json:"id"`
+	Username        string           `json:"username"`
+	DisplayName     string           `json:"display_name"`
 	Bio             *string          `json:"bio"`
 	AvatarURL       *string          `json:"avatar_url"`
 	FaviconURL      *string          `json:"favicon_url"`
-	Theme           *string          `json:"theme"`
-	CustomColors    *json.RawMessage `json:"custom_colors"`
-	BackgroundType  *string          `json:"background_type"`
+	Theme           string           `json:"theme"`
+	CustomColors    json.RawMessage  `json:"custom_colors"`
+	BackgroundType  string           `json:"background_type"`
 	BackgroundValue *string          `json:"background_value"`
-	ButtonStyle     *string          `json:"button_style"`
-	FontFamily      *string          `json:"font_family"`
-	SocialLinks     *json.RawMessage `json:"social_links"`
-	Links           *json.RawMessage `json:"links"`
+	ButtonStyle     string           `json:"button_style"`
+	FontFamily      string           `json:"font_family"`
+	SocialLinks     json.RawMessage  `json:"social_links"`
+	Links           json.RawMessage  `json:"links"`
 	SEOTitle        *string          `json:"seo_title"`
 	SEODescription  *string          `json:"seo_description"`
 	OGImageURL      *string          `json:"og_image_url"`
-	IsPublished     *bool            `json:"is_published"`
+	IsPublished     bool             `json:"is_published"`
 }
 
 func UpdateBioPage(c *fiber.Ctx) error {
@@ -56,6 +58,7 @@ func UpdateBioPage(c *fiber.Ctx) error {
 
 	var req UpdateBioPageRequest
 	if err := c.BodyParser(&req); err != nil {
+		log.Printf("Error parsing request body: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
@@ -65,13 +68,19 @@ func UpdateBioPage(c *fiber.Ctx) error {
 
 	// Build update params with null handling
 	params := database.UpdateBioPageParams{
-		Username: username,
-		UserID:   userUUID,
+		Username:        username,
+		UserID:          userUUID,
+		DisplayName:     req.DisplayName,
+		Theme:           sql.NullString{String: req.Theme, Valid: req.Theme != ""},
+		CustomColors:    pqtype.NullRawMessage{RawMessage: req.CustomColors, Valid: len(req.CustomColors) > 0},
+		BackgroundType:  sql.NullString{String: req.BackgroundType, Valid: req.BackgroundType != ""},
+		ButtonStyle:     sql.NullString{String: req.ButtonStyle, Valid: req.ButtonStyle != ""},
+		FontFamily:      sql.NullString{String: req.FontFamily, Valid: req.FontFamily != ""},
+		SocialLinks:     pqtype.NullRawMessage{RawMessage: req.SocialLinks, Valid: len(req.SocialLinks) > 0},
+		Links:           pqtype.NullRawMessage{RawMessage: req.Links, Valid: len(req.Links) > 0},
+		IsPublished:     sql.NullBool{Bool: req.IsPublished, Valid: true},
 	}
 
-	if req.DisplayName != nil {
-		params.DisplayName = *req.DisplayName
-	}
 	if req.Bio != nil {
 		params.Bio = sql.NullString{String: *req.Bio, Valid: true}
 	}
@@ -81,29 +90,8 @@ func UpdateBioPage(c *fiber.Ctx) error {
 	if req.FaviconURL != nil {
 		params.FaviconUrl = sql.NullString{String: *req.FaviconURL, Valid: true}
 	}
-	if req.Theme != nil {
-		params.Theme = sql.NullString{String: *req.Theme, Valid: true}
-	}
-	if req.CustomColors != nil {
-		params.CustomColors = pqtype.NullRawMessage{RawMessage: *req.CustomColors, Valid: true}
-	}
-	if req.BackgroundType != nil {
-		params.BackgroundType = sql.NullString{String: *req.BackgroundType, Valid: true}
-	}
 	if req.BackgroundValue != nil {
 		params.BackgroundValue = sql.NullString{String: *req.BackgroundValue, Valid: true}
-	}
-	if req.ButtonStyle != nil {
-		params.ButtonStyle = sql.NullString{String: *req.ButtonStyle, Valid: true}
-	}
-	if req.FontFamily != nil {
-		params.FontFamily = sql.NullString{String: *req.FontFamily, Valid: true}
-	}
-	if req.SocialLinks != nil {
-		params.SocialLinks = pqtype.NullRawMessage{RawMessage: *req.SocialLinks, Valid: true}
-	}
-	if req.Links != nil {
-		params.Links = pqtype.NullRawMessage{RawMessage: *req.Links, Valid: true}
 	}
 	if req.SEOTitle != nil {
 		params.SeoTitle = sql.NullString{String: *req.SEOTitle, Valid: true}
@@ -113,9 +101,6 @@ func UpdateBioPage(c *fiber.Ctx) error {
 	}
 	if req.OGImageURL != nil {
 		params.OgImageUrl = sql.NullString{String: *req.OGImageURL, Valid: true}
-	}
-	if req.IsPublished != nil {
-		params.IsPublished = sql.NullBool{Bool: *req.IsPublished, Valid: true}
 	}
 
 	bioPage, err := queries.UpdateBioPage(c.Context(), params)
