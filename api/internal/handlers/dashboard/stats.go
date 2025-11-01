@@ -327,12 +327,12 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 		}
 	}
 
-	// Parse referrer sources from clicks
+	// Parse referrer sources from clicks - use exact URLs
 	referrerMap := make(map[string]int64)
 	for _, click := range clicks {
 		if click.Referer.Valid && click.Referer.String != "" && click.Referer.String != "-" {
-			source := parseReferrerSource(click.Referer.String)
-			referrerMap[source]++
+			// Use exact referrer URL instead of categorizing
+			referrerMap[click.Referer.String]++
 		} else {
 			referrerMap["Direct"]++
 		}
@@ -356,10 +356,10 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 	for _, row := range referrerClicksByDate {
 		dateStr := row.Date.Format("2006-01-02")
 
-		// Parse referrer source
+		// Use exact referrer URL instead of categorizing
 		var source string
 		if row.Referer.Valid && row.Referer.String != "" && row.Referer.String != "-" {
-			source = parseReferrerSource(row.Referer.String)
+			source = row.Referer.String
 		} else {
 			source = "Direct"
 		}
