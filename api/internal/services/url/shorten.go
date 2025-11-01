@@ -2,6 +2,7 @@ package url
 
 import (
 	"database/sql"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -245,12 +246,16 @@ func ShortenURL(c *fiber.Ctx) error {
 			}
 			passwordHash = sql.NullString{String: hashedPassword, Valid: true}
 			isLocked = sql.NullBool{Bool: true, Valid: true}
+			log.Printf("[ShortenURL] Locking URL %s with password for Premium user %s", id, user.ID)
 		} else {
 			passwordHash = sql.NullString{Valid: false}
 			isLocked = sql.NullBool{Bool: false, Valid: true}
+			if body.Password != "" && tier != "premium" {
+				log.Printf("[ShortenURL] User %s (tier: %s) attempted to lock URL but is not Premium", user.ID, tier)
+			}
 		}
 
-		_, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
+		createdURL, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
 			UserID:       user.ID,
 			ShortID:      id,
 			OriginalUrl:  body.URL,
@@ -265,6 +270,11 @@ func ShortenURL(c *fiber.Ctx) error {
 				"error": "Failed to save URL to database",
 				"details": pgErr.Error(),
 			})
+		}
+
+		// Log if link was locked
+		if createdURL.IsLocked.Valid && createdURL.IsLocked.Bool {
+			c.Locals("url_locked", true)
 		}
 
 		// Increment monthly usage counter
