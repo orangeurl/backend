@@ -330,7 +330,7 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 	// Parse referrer sources from clicks
 	referrerMap := make(map[string]int64)
 	for _, click := range clicks {
-		if click.Referer.Valid && click.Referer.String != "" {
+		if click.Referer.Valid && click.Referer.String != "" && click.Referer.String != "-" {
 			source := parseReferrerSource(click.Referer.String)
 			referrerMap[source]++
 		} else {
@@ -358,7 +358,7 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 
 		// Parse referrer source
 		var source string
-		if row.Referer.Valid && row.Referer.String != "" {
+		if row.Referer.Valid && row.Referer.String != "" && row.Referer.String != "-" {
 			source = parseReferrerSource(row.Referer.String)
 		} else {
 			source = "Direct"
@@ -372,6 +372,15 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 		// Add clicks to the source for this date
 		dateReferrerMap[dateStr][source] += row.Clicks
 		allSources[source] = true
+	}
+
+	// Ensure all dates have all sources (fill in 0 for missing sources)
+	for dateStr := range dateReferrerMap {
+		for source := range allSources {
+			if _, exists := dateReferrerMap[dateStr][source]; !exists {
+				dateReferrerMap[dateStr][source] = 0
+			}
+		}
 	}
 
 	// Format as array of objects with date and all sources as keys
@@ -418,6 +427,7 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 			"os": click.Os.String,
 			"country": click.Country.String,
 			"referer": click.Referer.String,
+			"bot": click.IsBot.Bool,
 		}
 		recentClicksFormatted = append(recentClicksFormatted, recentClick)
 	}
