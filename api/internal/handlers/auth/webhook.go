@@ -287,14 +287,29 @@ func verifyWebhookSignature(c *fiber.Ctx) bool {
 	}
 
 	// Get Svix headers for signature verification
-	svixID := c.Get("svix-id")
-	svixTimestamp := c.Get("svix-timestamp")
-	svixSignature := c.Get("svix-signature")
+	// Try both capitalized and lowercase versions (Fiber is case-sensitive)
+	svixID := c.Get("Svix-Id")
+	if svixID == "" {
+		svixID = c.Get("svix-id")
+	}
+
+	svixTimestamp := c.Get("Svix-Timestamp")
+	if svixTimestamp == "" {
+		svixTimestamp = c.Get("svix-timestamp")
+	}
+
+	svixSignature := c.Get("Svix-Signature")
+	if svixSignature == "" {
+		svixSignature = c.Get("svix-signature")
+	}
 
 	if svixID == "" || svixTimestamp == "" || svixSignature == "" {
-		log.Printf("[Webhook] Missing Svix headers for signature verification")
+		log.Printf("[Webhook] Missing Svix headers - ID: %v, Timestamp: %v, Signature: %v",
+			svixID != "", svixTimestamp != "", svixSignature != "")
 		return false
 	}
+
+	log.Printf("[Webhook] Found Svix headers - verifying signature...")
 
 	// Create Svix webhook instance
 	wh, err := svix.NewWebhook(webhookSecret)
