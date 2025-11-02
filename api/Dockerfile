@@ -12,11 +12,18 @@ FROM alpine
 
 RUN adduser -S -D -H -h /app appuser
 
-USER appuser
+# Create app directory and copy files as root first
+RUN mkdir -p /app
 
 COPY . /app
 
 COPY --from=builder /build/main /app/
+
+# Change ownership to appuser
+RUN chown -R appuser /app
+
+# Now switch to appuser
+USER appuser
 
 WORKDIR /app
 
