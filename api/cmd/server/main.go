@@ -81,7 +81,11 @@ func main() {
 	}
 	defer database.ClosePostgres()
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"172.18.0.0/16", "127.0.0.1"}, // Docker network and localhost
+		ProxyHeader:             fiber.HeaderXForwardedFor,
+	})
 	app.Use(logger.New())
 
 	// CORS configuration - PRODUCTION (no localhost)
