@@ -10,16 +10,22 @@ services:
     restart: unless-stopped
 
   api:
+    env_file:
+      - .env
     environment:
-      - APP_PORT=:3000
-      - PUBLIC_HOST=api.orangeurl.live
-      - DOMAIN=https://orangeurl.live
-      - API_QUOTA=10
-      - DB_ADDR=db:6379
-      - DB_PASS=
-      - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
-      - DATABASE_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
+      - APP_PORT=${APP_PORT:-:3000}
+      - PUBLIC_HOST=${PUBLIC_HOST:-api.orangeurl.live}
+      - DOMAIN=${DOMAIN:-https://orangeurl.live}
+      - API_QUOTA=${API_QUOTA:-10}
+      - DB_ADDR=${REDIS_HOST:-db}:${REDIS_PORT:-6379}
+      - DB_PASS=${REDIS_PASSWORD}
+      - POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}?sslmode=${POSTGRES_SSLMODE:-disable}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}?sslmode=${POSTGRES_SSLMODE:-disable}
       - CLERK_WEBHOOK_SECRET=${CLERK_WEBHOOK_SECRET}
+      - CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+      - CLERK_JWKS_URL=${CLERK_JWKS_URL}
+      - DODO_WEBHOOK_SECRET=${DODO_WEBHOOK_SECRET}
+      - GEOIP_DB_PATH=${GEOIP_DB_PATH}
     build: api
     ports:
       - "3000:3000"
@@ -32,8 +38,13 @@ services:
 
   db:
     build: db
+    env_file:
+      - .env
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - ./data:/data
     restart: unless-stopped
@@ -41,16 +52,18 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: orangeurl_postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: orangeurl
-      POSTGRES_PASSWORD: orangeurl123
-      POSTGRES_DB: orangeurl
+      POSTGRES_USER: ${POSTGRES_USER:-orangeurl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-orangeurl}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U orangeurl"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orangeurl}"]
       interval: 5s
       timeout: 5s
       retries: 5

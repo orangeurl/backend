@@ -1,10 +1,17 @@
 package middleware
 
 import (
+	"crypto/rsa"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -23,6 +30,14 @@ type ClerkJWK struct {
 	N   string `json:"n"`
 	E   string `json:"e"`
 }
+
+// JWKS cache
+var (
+	jwksCache      *ClerkJWKS
+	jwksCacheMutex sync.RWMutex
+	jwksCacheTime  time.Time
+	jwksCacheTTL   = 1 * time.Hour
+)
 
 func ClerkAuthMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -87,38 +102,182 @@ func ClerkAuthMiddleware() fiber.Handler {
 }
 
 func verifyClerkJWT(tokenString string) (*jwt.RegisteredClaims, error) {
-	// For now, we'll just parse the token without verification
-	// The token is already verified by Clerk on the frontend
-	// In production, you should implement proper RSA verification with JWKS
-	
-	// Parse token without verification to extract claims
-	token, _, err := jwt.NewParser().ParseUnverified(tokenString, &jwt.RegisteredClaims{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse token: %w", err)
-	}
-
-	if claims, ok := token.Claims.(*jwt.RegisteredClaims); ok {
-		// Basic validation: check if token has required fields
-		if claims.Subject == "" {
-			return nil, fmt.Errorf("token missing subject (clerk user ID)")
+	// Parse the token to get the kid (key ID) from the header
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Verify signing method
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return claims, nil
+
+		// Get the kid from token header
+		kid, ok := token.Header["kid"].(string)
+		if !ok {
+			return nil, fmt.Errorf("kid not found in token header")
+		}
+
+		// Get the public key for this kid
+		publicKey, err := getClerkPublicKey(kid)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get public key: %w", err)
+		}
+
+		return publicKey, nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify token: %w", err)
 	}
 
-	return nil, fmt.Errorf("invalid token claims")
+	if !token.Valid {
+		return nil, fmt.Errorf("token is invalid")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse claims")
+	}
+
+	// Convert MapClaims to RegisteredClaims
+	registeredClaims := &jwt.RegisteredClaims{}
+
+	if sub, ok := claims["sub"].(string); ok {
+		registeredClaims.Subject = sub
+	} else {
+		return nil, fmt.Errorf("token missing subject (clerk user ID)")
+	}
+
+	if exp, ok := claims["exp"].(float64); ok {
+		registeredClaims.ExpiresAt = jwt.NewNumericDate(time.Unix(int64(exp), 0))
+	}
+
+	if iat, ok := claims["iat"].(float64); ok {
+		registeredClaims.IssuedAt = jwt.NewNumericDate(time.Unix(int64(iat), 0))
+	}
+
+	if nbf, ok := claims["nbf"].(float64); ok {
+		registeredClaims.NotBefore = jwt.NewNumericDate(time.Unix(int64(nbf), 0))
+	}
+
+	// Validate expiration
+	if registeredClaims.ExpiresAt != nil && time.Now().After(registeredClaims.ExpiresAt.Time) {
+		return nil, fmt.Errorf("token has expired")
+	}
+
+	return registeredClaims, nil
 }
 
-func getClerkPublicKey(kid string) (interface{}, error) {
-	// For development, we'll use a simple approach
-	// In production, you should cache this and refresh periodically
-	clerkSecretKey := os.Getenv("CLERK_SECRET_KEY")
-	if clerkSecretKey == "" {
-		return nil, fmt.Errorf("CLERK_SECRET_KEY not set")
+func getClerkPublicKey(kid string) (*rsa.PublicKey, error) {
+	// Get JWKS from cache or fetch new
+	jwks, err := getJWKS()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JWKS: %w", err)
 	}
 
-	// For now, we'll use the secret key directly
-	// In production, you should fetch the JWKS from Clerk's API
-	return []byte(clerkSecretKey), nil
+	// Find the key with matching kid
+	for _, key := range jwks.Keys {
+		if key.Kid == kid {
+			return jwkToPublicKey(&key)
+		}
+	}
+
+	return nil, fmt.Errorf("key with kid %s not found in JWKS", kid)
+}
+
+func getJWKS() (*ClerkJWKS, error) {
+	jwksCacheMutex.RLock()
+	if jwksCache != nil && time.Since(jwksCacheTime) < jwksCacheTTL {
+		jwksCacheMutex.RUnlock()
+		return jwksCache, nil
+	}
+	jwksCacheMutex.RUnlock()
+
+	// Fetch JWKS from Clerk
+	jwksCacheMutex.Lock()
+	defer jwksCacheMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if jwksCache != nil && time.Since(jwksCacheTime) < jwksCacheTTL {
+		return jwksCache, nil
+	}
+
+	// Get Clerk publishable key to construct JWKS URL
+	clerkPublishableKey := os.Getenv("CLERK_PUBLISHABLE_KEY")
+	if clerkPublishableKey == "" {
+		return nil, fmt.Errorf("CLERK_PUBLISHABLE_KEY not set")
+	}
+
+	// Extract frontend API from publishable key (format: pk_test_xxxxx or pk_live_xxxxx)
+	// The JWKS URL is: https://[clerk-frontend-api]/.well-known/jwks.json
+	var jwksURL string
+	if strings.HasPrefix(clerkPublishableKey, "pk_test_") {
+		// Test environment
+		jwksURL = "https://clerk.orangeurl.live/.well-known/jwks.json"
+	} else if strings.HasPrefix(clerkPublishableKey, "pk_live_") {
+		// Production environment
+		jwksURL = "https://clerk.orangeurl.live/.well-known/jwks.json"
+	} else {
+		return nil, fmt.Errorf("invalid CLERK_PUBLISHABLE_KEY format")
+	}
+
+	// Allow override via environment variable
+	if customJWKSURL := os.Getenv("CLERK_JWKS_URL"); customJWKSURL != "" {
+		jwksURL = customJWKSURL
+	}
+
+	log.Printf("[JWKS] Fetching from: %s", jwksURL)
+
+	resp, err := http.Get(jwksURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+	}
+
+	var jwks ClerkJWKS
+	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+		return nil, fmt.Errorf("failed to decode JWKS: %w", err)
+	}
+
+	if len(jwks.Keys) == 0 {
+		return nil, fmt.Errorf("JWKS contains no keys")
+	}
+
+	jwksCache = &jwks
+	jwksCacheTime = time.Now()
+
+	log.Printf("[JWKS] Successfully cached %d keys", len(jwks.Keys))
+	return jwksCache, nil
+}
+
+func jwkToPublicKey(jwk *ClerkJWK) (*rsa.PublicKey, error) {
+	// Decode the modulus (N)
+	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode modulus: %w", err)
+	}
+
+	// Decode the exponent (E)
+	eBytes, err := base64.RawURLEncoding.DecodeString(jwk.E)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode exponent: %w", err)
+	}
+
+	// Convert bytes to big.Int
+	n := new(big.Int).SetBytes(nBytes)
+
+	// Convert exponent bytes to int
+	e := 0
+	for _, b := range eBytes {
+		e = e*256 + int(b)
+	}
+
+	return &rsa.PublicKey{
+		N: n,
+		E: e,
+	}, nil
 }
 
 func RequireAuth() fiber.Handler {

@@ -7,3 +7,4 @@ api/main
 *.dll
 *.so
 *.dylib
+api/cmd/server/server

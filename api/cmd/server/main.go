@@ -45,16 +45,6 @@ func setupRoutes(app *fiber.App) {
 	// Waitlist route (public - no auth required)
 	app.Post("/api/v1/api/waitlist", waitlist.JoinWaitlist)
 
-	// Test endpoint for debugging (public for now)
-	app.Get("/api/test/users", func(c *fiber.Ctx) error {
-		queries := database.GetQueries()
-		users, err := queries.ListUsers(c.Context())
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
-		}
-		return c.JSON(fiber.Map{"users": users})
-	})
-
 	// Protected routes
 	api := app.Group("/api")
 	
@@ -95,9 +85,9 @@ func main() {
 	app := fiber.New()
 	app.Use(logger.New())
 
-	// CORS configuration
+	// CORS configuration - PRODUCTION (no localhost)
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "https://app.orangeurl.live,https://orangeurl.live,http://localhost:3001,http://localhost:3000",
+		AllowOrigins: "https://app.orangeurl.live,https://orangeurl.live",
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
 		AllowCredentials: true,
