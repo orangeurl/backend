@@ -245,12 +245,19 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		for _, url := range urls {
 			// Get click count for this URL
 			clicks, _ := queries.GetURLAnalytics(c.Context(), url.ID)
+
+			// Use current time if CreatedAt is not valid
+			createdAt := time.Now()
+			if url.CreatedAt.Valid {
+				createdAt = url.CreatedAt.Time
+			}
+
 			recentURLs = append(recentURLs, URLWithStats{
 				ID:          url.ID.String(),
 				ShortID:     url.ShortID,
 				OriginalURL: url.OriginalUrl,
 				Clicks:      int64(len(clicks)),
-				CreatedAt:   url.CreatedAt.Time,
+				CreatedAt:   createdAt,
 				IsActive:    url.IsActive.Bool,
 				IsLocked:    url.IsLocked.Valid && url.IsLocked.Bool,
 			})
@@ -446,17 +453,26 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 			"browser": click.Browser.String,
 			"os": click.Os.String,
 			"country": click.Country.String,
+			"city": click.City.String,
 			"referer": click.Referer.String,
 			"bot": click.IsBot.Bool,
 		}
 		recentClicksFormatted = append(recentClicksFormatted, recentClick)
 	}
 
+	// Format created_at properly
+	var createdAt interface{}
+	if url.CreatedAt.Valid {
+		createdAt = url.CreatedAt.Time
+	} else {
+		createdAt = nil
+	}
+
 	response := fiber.Map{
 		"url": fiber.Map{
 			"short_id":     url.ShortID,
 			"original_url": url.OriginalUrl,
-			"created_at":   url.CreatedAt,
+			"created_at":   createdAt,
 			"is_active":    url.IsActive,
 		},
 		"total_clicks":             len(clicks),
