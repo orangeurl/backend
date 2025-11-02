@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	UnlockSessionTTL     = 1 * time.Hour  // Session expires after 1 hour
-	MaxPasswordAttempts  = 5              // Max attempts before rate limit
-	RateLimitWindow      = 15 * time.Minute // Rate limit window
-	TemporaryLockAttempts = 10            // Lock after this many attempts
+	UnlockSessionTTL     = 5 * time.Second   // Very short session - require password each visit
+	MaxPasswordAttempts  = 5                 // Max attempts before rate limit
+	RateLimitWindow      = 15 * time.Minute  // Rate limit window
+	TemporaryLockAttempts = 10               // Lock after this many attempts
 )
 
 // GetUnlockSessionKey returns the Redis key for unlock sessions
