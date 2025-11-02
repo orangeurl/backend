@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	svix "github.com/svix/svix-webhooks/go"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
@@ -281,11 +282,40 @@ func verifyWebhookSignature(c *fiber.Ctx) bool {
 	webhookSecret := os.Getenv("CLERK_WEBHOOK_SECRET")
 
 	if webhookSecret == "" {
-		log.Printf("CLERK_WEBHOOK_SECRET not set, skipping verification")
+		log.Printf("[Webhook] CLERK_WEBHOOK_SECRET not set, skipping verification")
 		return true
 	}
 
-	// TODO: Implement proper signature verification
-	// For now, always return true to allow testing
+	// Get Svix headers for signature verification
+	svixID := c.Get("svix-id")
+	svixTimestamp := c.Get("svix-timestamp")
+	svixSignature := c.Get("svix-signature")
+
+	if svixID == "" || svixTimestamp == "" || svixSignature == "" {
+		log.Printf("[Webhook] Missing Svix headers for signature verification")
+		return false
+	}
+
+	// Create Svix webhook instance
+	wh, err := svix.NewWebhook(webhookSecret)
+	if err != nil {
+		log.Printf("[Webhook] Failed to create Svix webhook verifier: %v", err)
+		return false
+	}
+
+	// Verify the webhook signature
+	headers := map[string][]string{
+		"svix-id":        {svixID},
+		"svix-timestamp": {svixTimestamp},
+		"svix-signature": {svixSignature},
+	}
+
+	err = wh.Verify(c.Body(), headers)
+	if err != nil {
+		log.Printf("[Webhook] Signature verification failed: %v", err)
+		return false
+	}
+
+	log.Printf("[Webhook] Signature verification successful")
 	return true
 }

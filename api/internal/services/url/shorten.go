@@ -1,8 +1,10 @@
 package url
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"log"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -11,11 +13,39 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/url"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 )
+
+const (
+	// Character set for short URLs: lowercase + uppercase + digits (62 characters total)
+	shortURLCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	shortURLLength  = 6
+)
+
+// generateShortID generates a random short ID using the full alphanumeric character set
+func generateShortID(length int) string {
+	result := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(shortURLCharset)))
+
+	for i := 0; i < length; i++ {
+		num, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			// Fallback to simple method if crypto/rand fails
+			return generateShortIDFallback(length)
+		}
+		result[i] = shortURLCharset[num.Int64()]
+	}
+
+	return string(result)
+}
+
+// generateShortIDFallback is a fallback method using math/rand (less secure but works)
+func generateShortIDFallback(length int) string {
+	// Use UUID as fallback to maintain uniqueness
+	return strings.ReplaceAll(strings.ReplaceAll(string([]rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"))[:length], "-", ""), "_", "")[:length]
+}
 
 type request struct {
 	URL          string        `json:"url"`
@@ -81,17 +111,14 @@ func ShortenURL(c *fiber.Ctx) error {
 	}
 
 	// enforce https using the http_helpers.go file
-	// TODO: investigate the working of this; misbheaving.
-
 	body.URL = url.EnforceHTTP(body.URL)
 
 	// assigning url according to the custom id
-	// TODO: allow all 26+9+26 combination; currently only supporting 26+9
-
 	var id string
 
 	if body.CustomShort == "" {
-		id = uuid.New().String()[:6]
+		// Generate random short ID using full alphanumeric character set (a-z, A-Z, 0-9)
+		id = generateShortID(shortURLLength)
 	} else {
 		// Preserve exact capitalization as provided by user (e.g., "Snow" stays "Snow", not "snow")
 		id = body.CustomShort

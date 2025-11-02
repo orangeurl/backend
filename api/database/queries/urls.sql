@@ -46,3 +46,9 @@ WHERE short_id = $1;
 UPDATE urls
 SET password_attempts = 0, last_password_attempt = NULL
 WHERE short_id = $1;
+
+-- name: GetMonthlyURLCount :one
+SELECT COUNT(*) FROM urls
+WHERE user_id = $1
+    AND is_active = TRUE
+    AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE);

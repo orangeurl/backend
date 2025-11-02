@@ -102,3 +102,18 @@ FROM url_clicks
 WHERE url_id = $1
 GROUP BY DATE(clicked_at), referer
 ORDER BY date DESC, clicks DESC;
+
+-- name: DeleteOldAnalytics :exec
+DELETE FROM url_clicks
+WHERE url_id IN (
+    SELECT id FROM urls WHERE user_id = $1
+)
+AND clicked_at < $2;
+
+-- name: GetMonthlyClickStats :one
+SELECT
+    COUNT(*) as monthly_clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+    AND DATE_TRUNC('month', uc.clicked_at) = DATE_TRUNC('month', CURRENT_DATE);

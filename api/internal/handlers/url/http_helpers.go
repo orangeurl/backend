@@ -6,10 +6,18 @@ import (
 )
 
 func EnforceHTTP(url string) string {
-	if url[:4] != "http" {
-		return "http://" + url
+	// Check if URL is too short or doesn't start with http/https
+	if len(url) < 4 {
+		return "https://" + url
 	}
-	return url
+
+	// If already has http:// or https://, return as is
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return url
+	}
+
+	// Add https:// prefix for URLs without protocol
+	return "https://" + url
 }
 
 func RemoveDomainError(url string) bool {

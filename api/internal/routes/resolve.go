@@ -2,14 +2,71 @@ package routes
 
 import (
 	"database/sql"
+	"log"
 	"net"
+	"os"
 	"strings"
+	"sync"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
+	"github.com/oschwald/geoip2-golang"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
+
+var (
+	geoIPReader *geoip2.Reader
+	geoIPOnce   sync.Once
+)
+
+// initGeoIP initializes the GeoIP2 reader (called once)
+func initGeoIP() {
+	geoIPOnce.Do(func() {
+		dbPath := os.Getenv("GEOIP_DB_PATH")
+		if dbPath == "" {
+			dbPath = "/usr/share/GeoIP/GeoLite2-City.mmdb" // Default path
+		}
+
+		reader, err := geoip2.Open(dbPath)
+		if err != nil {
+			log.Printf("[GeoIP] Failed to open GeoIP database at %s: %v (city lookup will be disabled)", dbPath, err)
+			return
+		}
+
+		geoIPReader = reader
+		log.Printf("[GeoIP] Successfully loaded GeoIP database from %s", dbPath)
+	})
+}
+
+// getCityFromIP looks up city information from IP address using GeoIP2
+func getCityFromIP(ipAddress string) string {
+	// Initialize GeoIP reader if not already done
+	initGeoIP()
+
+	if geoIPReader == nil {
+		return "" // GeoIP database not available
+	}
+
+	ip := net.ParseIP(ipAddress)
+	if ip == nil {
+		return ""
+	}
+
+	record, err := geoIPReader.City(ip)
+	if err != nil {
+		return ""
+	}
+
+	// Return city name in English
+	if record.City.Names != nil {
+		if cityName, ok := record.City.Names["en"]; ok {
+			return cityName
+		}
+	}
+
+	return ""
+}
 
 // Simple user-agent parser helpers
 func parseDeviceType(ua string) string {
@@ -189,6 +246,9 @@ func ResolveURL(c *fiber.Ctx) error {
 		// Try to get country from common headers set by CDNs/proxies
 		country := extractCountryFromHeaders(c)
 
+		// Try to get city from GeoIP lookup
+		city := getCityFromIP(ipAddress)
+
 		// Create click record
 		// Parse IP address using net package
 		ipAddr := pqtype.Inet{Valid: false}
@@ -211,7 +271,7 @@ func ResolveURL(c *fiber.Ctx) error {
 			UserAgent:  sql.NullString{String: userAgent, Valid: userAgent != ""},
 			Referer:    sql.NullString{String: referer, Valid: referer != ""},
 			Country:    sql.NullString{String: country, Valid: country != ""},
-			City:       sql.NullString{Valid: false}, // TODO: Implement GeoIP lookup
+			City:       sql.NullString{String: city, Valid: city != ""},
 			DeviceType: sql.NullString{String: deviceType, Valid: true},
 			Browser:    sql.NullString{String: browser, Valid: true},
 			Os:         sql.NullString{String: os, Valid: true},

@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"time"
 
@@ -27,30 +28,42 @@ func CleanupOldAnalytics() {
 		return
 	}
 
+	deletedCount := 0
 	for _, user := range users {
 		// Get user's subscription to determine retention period
 		subscription, subErr := queries.GetUserSubscription(ctx, user.ID)
 		retentionDays := 30 // Free tier default
-		
+		planTier := "free"
+
 		if subErr == nil {
+			planTier = subscription.PlanID
 			if subscription.PlanID == "pro" {
 				retentionDays = 365 // 1 year
 			} else if subscription.PlanID == "premium" {
 				// Premium has unlimited retention - skip cleanup
+				log.Printf("[Cleanup] Skipping user %s (Premium tier - unlimited retention)", user.Email)
 				continue
 			}
 		}
 
 		cutoffDate := time.Now().AddDate(0, 0, -retentionDays)
-		
+
 		// Delete old analytics for this user's URLs
-		// Note: This requires a custom SQL query - marking as TODO for now
-		log.Printf("[Cleanup] Would delete analytics older than %s for user %s (tier: %s, retention: %d days)",
-			cutoffDate.Format("2006-01-02"), user.Email, subscription.PlanID, retentionDays)
-		
-		// TODO: Implement actual deletion query
-		// DELETE FROM url_clicks WHERE url_id IN (SELECT id FROM urls WHERE user_id = ?) AND clicked_at < ?
+		err := queries.DeleteOldAnalytics(ctx, database.DeleteOldAnalyticsParams{
+			UserID:   user.ID,
+			ClickedAt: sql.NullTime{Time: cutoffDate, Valid: true},
+		})
+
+		if err != nil {
+			log.Printf("[Cleanup] Error deleting analytics for user %s: %v", user.Email, err)
+		} else {
+			deletedCount++
+			log.Printf("[Cleanup] Deleted analytics older than %s for user %s (tier: %s, retention: %d days)",
+				cutoffDate.Format("2006-01-02"), user.Email, planTier, retentionDays)
+		}
 	}
+
+	log.Printf("[Cleanup] Processed %d users, deleted analytics for %d users", len(users), deletedCount)
 
 	log.Println("[Cleanup] Analytics cleanup completed")
 }

@@ -146,6 +146,26 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		log.Printf("[Dashboard] Error getting click stats: %v", err)
 	}
 
+	// Get monthly click stats
+	log.Println("[Dashboard] Fetching monthly click stats...")
+	monthlyClicks, err := queries.GetMonthlyClickStats(c.Context(), user.ID)
+	if err != nil {
+		log.Printf("[Dashboard] Error getting monthly click stats: %v", err)
+		monthlyClicks = 0
+	} else {
+		log.Printf("[Dashboard] Monthly clicks: %d", monthlyClicks)
+	}
+
+	// Get monthly URL count
+	log.Println("[Dashboard] Fetching monthly URL count...")
+	monthlyURLCount, err := queries.GetMonthlyURLCount(c.Context(), user.ID)
+	if err != nil {
+		log.Printf("[Dashboard] Error getting monthly URL count: %v", err)
+		monthlyURLCount = 0
+	} else {
+		log.Printf("[Dashboard] Monthly URL count: %d", monthlyURLCount)
+	}
+
 	// Get top countries
 	log.Println("[Dashboard] Fetching top countries...")
 	countries, err := queries.GetUserClicksByCountry(c.Context(), user.ID)
@@ -253,8 +273,8 @@ func GetDashboardStats(c *fiber.Ctx) error {
 	stats := DashboardStats{
 		TotalURLs:       urlCount,
 		TotalClicks:     totalClicks,
-		URLsThisMonth:   urlCount, // TODO: Implement monthly filtering
-		ClicksThisMonth: totalClicks, // TODO: Implement monthly filtering
+		URLsThisMonth:   monthlyURLCount,
+		ClicksThisMonth: monthlyClicks,
 		PlanName:        getPlanDisplayName(planTier),
 		URLLimit:        urlLimit,
 		URLsRemaining:   urlsRemaining,

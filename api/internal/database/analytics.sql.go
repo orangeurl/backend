@@ -64,6 +64,40 @@ func (q *Queries) CreateClick(ctx context.Context, arg CreateClickParams) (UrlCl
 	return i, err
 }
 
+const deleteOldAnalytics = `-- name: DeleteOldAnalytics :exec
+DELETE FROM url_clicks
+WHERE url_id IN (
+    SELECT id FROM urls WHERE user_id = $1
+)
+AND clicked_at < $2
+`
+
+type DeleteOldAnalyticsParams struct {
+	UserID    uuid.UUID    `json:"user_id"`
+	ClickedAt sql.NullTime `json:"clicked_at"`
+}
+
+func (q *Queries) DeleteOldAnalytics(ctx context.Context, arg DeleteOldAnalyticsParams) error {
+	_, err := q.db.ExecContext(ctx, deleteOldAnalytics, arg.UserID, arg.ClickedAt)
+	return err
+}
+
+const getMonthlyClickStats = `-- name: GetMonthlyClickStats :one
+SELECT
+    COUNT(*) as monthly_clicks
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+    AND DATE_TRUNC('month', uc.clicked_at) = DATE_TRUNC('month', CURRENT_DATE)
+`
+
+func (q *Queries) GetMonthlyClickStats(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getMonthlyClickStats, userID)
+	var monthly_clicks int64
+	err := row.Scan(&monthly_clicks)
+	return monthly_clicks, err
+}
+
 const getURLAnalytics = `-- name: GetURLAnalytics :many
 SELECT id, url_id, ip_address, user_agent, referer, country, city, device_type, browser, os, is_bot, clicked_at FROM url_clicks WHERE url_id = $1
 ORDER BY clicked_at DESC

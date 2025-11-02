@@ -70,6 +70,20 @@ func (q *Queries) DeleteURL(ctx context.Context, arg DeleteURLParams) error {
 	return err
 }
 
+const getMonthlyURLCount = `-- name: GetMonthlyURLCount :one
+SELECT COUNT(*) FROM urls
+WHERE user_id = $1
+    AND is_active = TRUE
+    AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+`
+
+func (q *Queries) GetMonthlyURLCount(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getMonthlyURLCount, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getURLByShortID = `-- name: GetURLByShortID :one
 SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls WHERE short_id = $1 AND is_active = TRUE
 `
