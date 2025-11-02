@@ -255,12 +255,17 @@ func verifySignature(payload []byte, signature string, secret string) bool {
 
 // Infer plan name by product mapping using env placeholders you provided
 func inferPlanName(productID string) string {
-	pro := os.Getenv("DODO_PRO_MONTHLY_PRODUCT_ID")
-	premium := os.Getenv("DODO_PREMIUM_MONTHLY_PRODUCT_ID")
-	if productID == pro {
+	proMonthly := os.Getenv("DODO_PRO_MONTHLY_PRODUCT_ID")
+	premiumMonthly := os.Getenv("DODO_PREMIUM_MONTHLY_PRODUCT_ID")
+	proAnnual := os.Getenv("DODO_PRO_ANNUAL_PRODUCT_ID")
+	premiumAnnual := os.Getenv("DODO_PREMIUM_ANNUAL_PRODUCT_ID")
+	
+	// Check Pro plans (both monthly and annual)
+	if productID == proMonthly || productID == proAnnual {
 		return "pro"
 	}
-	if productID == premium {
+	// Check Premium plans (both monthly and annual)
+	if productID == premiumMonthly || productID == premiumAnnual {
 		return "premium"
 	}
 	return "free"
