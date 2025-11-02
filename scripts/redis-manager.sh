@@ -7,6 +7,22 @@ echo "           Redis Manager"
 echo "================================================"
 echo ""
 
+# Load Redis password from .env file
+if [ -f ../.env ]; then
+    export $(grep -v '^#' ../.env | grep 'REDIS_PASSWORD' | xargs)
+elif [ -f .env ]; then
+    export $(grep -v '^#' .env | grep 'REDIS_PASSWORD' | xargs)
+else
+    echo "❌ Error: .env file not found"
+    echo "Please run this script from backend/scripts/ directory"
+    exit 1
+fi
+
+if [ -z "$REDIS_PASSWORD" ]; then
+    echo "❌ Error: REDIS_PASSWORD not found in .env file"
+    exit 1
+fi
+
 # Function to display all keys from a database
 show_database() {
     local DB=$1
@@ -15,8 +31,8 @@ show_database() {
     echo "--- Database $DB: $DB_NAME ---"
     echo ""
 
-    # Get all keys using SCAN
-    KEYS=$(docker-compose exec -T db redis-cli -n $DB --scan 2>/dev/null)
+    # Get all keys using SCAN with authentication
+    KEYS=$(docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n $DB --scan 2>/dev/null)
 
     if [ -z "$KEYS" ]; then
         echo "  (empty)"
@@ -28,10 +44,10 @@ show_database() {
     while IFS= read -r key; do
         if [ -n "$key" ]; then
             # Get the value
-            VALUE=$(docker-compose exec -T db redis-cli -n $DB --raw GET "$key" 2>/dev/null)
+            VALUE=$(docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n $DB --raw GET "$key" 2>/dev/null)
 
             # Get TTL
-            TTL=$(docker-compose exec -T db redis-cli -n $DB TTL "$key" 2>/dev/null | tr -d '\r')
+            TTL=$(docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n $DB TTL "$key" 2>/dev/null | tr -d '\r')
 
             echo "  Key: $key"
             echo "  Value: $VALUE"
@@ -77,12 +93,12 @@ case $OPTION in
         fi
 
         # Check if key exists
-        EXISTS=$(docker-compose exec -T db redis-cli -n $DB_NUM EXISTS "$KEY_TO_DELETE" 2>/dev/null | tr -d '\r')
+        EXISTS=$(docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n $DB_NUM EXISTS "$KEY_TO_DELETE" 2>/dev/null | tr -d '\r')
 
         if [ "$EXISTS" = "0" ]; then
             echo "❌ Key '$KEY_TO_DELETE' not found in database $DB_NUM"
         else
-            docker-compose exec -T db redis-cli -n $DB_NUM DEL "$KEY_TO_DELETE" > /dev/null 2>&1
+            docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n $DB_NUM DEL "$KEY_TO_DELETE" > /dev/null 2>&1
             echo "✅ Deleted key: $KEY_TO_DELETE from database $DB_NUM"
         fi
         ;;
@@ -91,7 +107,7 @@ case $OPTION in
         echo ""
         read -p "⚠️  Delete ALL URL mappings? (yes/no): " CONFIRM
         if [ "$CONFIRM" = "yes" ]; then
-            docker-compose exec -T db redis-cli -n 0 FLUSHDB > /dev/null 2>&1
+            docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n 0 FLUSHDB > /dev/null 2>&1
             echo "✅ Database 0 cleared (all URL mappings deleted)"
         else
             echo "❌ Cancelled"
@@ -102,7 +118,7 @@ case $OPTION in
         echo ""
         read -p "⚠️  Delete ALL rate limits? (yes/no): " CONFIRM
         if [ "$CONFIRM" = "yes" ]; then
-            docker-compose exec -T db redis-cli -n 1 FLUSHDB > /dev/null 2>&1
+            docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" -n 1 FLUSHDB > /dev/null 2>&1
             echo "✅ Database 1 cleared (all rate limits deleted)"
         else
             echo "❌ Cancelled"
@@ -113,7 +129,7 @@ case $OPTION in
         echo ""
         read -p "⚠️  Delete EVERYTHING from Redis? (yes/no): " CONFIRM
         if [ "$CONFIRM" = "yes" ]; then
-            docker-compose exec -T db redis-cli FLUSHALL > /dev/null 2>&1
+            docker compose exec -T db redis-cli -a "$REDIS_PASSWORD" FLUSHALL > /dev/null 2>&1
             echo "✅ All Redis databases cleared"
         else
             echo "❌ Cancelled"
