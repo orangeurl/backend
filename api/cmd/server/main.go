@@ -71,10 +71,9 @@ func setupRoutes(app *fiber.App) {
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Warning: .env file not found: %v", err)
-	}
+	// Try to load .env file, but don't warn if it doesn't exist
+	// (in production, environment variables are provided by Docker Compose)
+	_ = godotenv.Load()
 
 	// Initialize database
 	if err := database.InitPostgres(); err != nil {

@@ -47,6 +47,36 @@ func generateShortIDFallback(length int) string {
 	return strings.ReplaceAll(strings.ReplaceAll(string([]rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"))[:length], "-", ""), "_", "")[:length]
 }
 
+// isValidCustomShortURL validates custom short URLs for security
+// Only allows alphanumeric characters, hyphens, and underscores
+// Prevents path traversal, XSS, and other injection attacks
+func isValidCustomShortURL(shortURL string) bool {
+	if shortURL == "" || len(shortURL) > 50 {
+		return false
+	}
+
+	// Only allow alphanumeric characters, hyphens, and underscores
+	for _, char := range shortURL {
+		if !((char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_') {
+			return false
+		}
+	}
+
+	// Block common attack patterns
+	blockedPatterns := []string{"..", "./", "\\", "<", ">", "\"", "'", "`"}
+	lowerShort := strings.ToLower(shortURL)
+	for _, pattern := range blockedPatterns {
+		if strings.Contains(lowerShort, pattern) {
+			return false
+		}
+	}
+
+	return true
+}
+
 type request struct {
 	URL          string        `json:"url"`
 	CustomShort  string        `json:"short"`
@@ -100,6 +130,11 @@ func ShortenURL(c *fiber.Ctx) error {
 		}
 	}
 
+	// Validate URL protocol first (block javascript:, data:, etc.)
+	if err := url.ValidateURLProtocol(body.URL); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Only http and https URLs are allowed"})
+	}
+
 	// checking if the url is an actual url
 	if !govalidator.IsURL(body.URL) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid URL"})
@@ -113,6 +148,11 @@ func ShortenURL(c *fiber.Ctx) error {
 	// enforce https using the http_helpers.go file
 	body.URL = url.EnforceHTTP(body.URL)
 
+	// Double-check after enforcement - block if dangerous protocol returned empty string
+	if body.URL == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid URL protocol"})
+	}
+
 	// assigning url according to the custom id
 	var id string
 
@@ -120,6 +160,13 @@ func ShortenURL(c *fiber.Ctx) error {
 		// Generate random short ID using full alphanumeric character set (a-z, A-Z, 0-9)
 		id = generateShortID(shortURLLength)
 	} else {
+		// Validate custom short URL for security
+		if !isValidCustomShortURL(body.CustomShort) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Custom short URL can only contain letters, numbers, hyphens, and underscores (1-50 characters)",
+			})
+		}
+
 		// Preserve exact capitalization as provided by user (e.g., "Snow" stays "Snow", not "snow")
 		id = body.CustomShort
 

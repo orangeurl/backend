@@ -8,5 +8,4 @@ api/main
 *.so
 *.dylib
 api/cmd/server/server
-tasks.md
 .env
