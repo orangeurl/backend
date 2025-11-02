@@ -84,6 +84,30 @@ func (q *Queries) GetMonthlyURLCount(ctx context.Context, userID uuid.UUID) (int
 	return count, err
 }
 
+const getURL = `-- name: GetURL :one
+SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls WHERE id = $1
+`
+
+func (q *Queries) GetURL(ctx context.Context, id uuid.UUID) (Url, error) {
+	row := q.db.QueryRowContext(ctx, getURL, id)
+	var i Url
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ShortID,
+		&i.OriginalUrl,
+		&i.Expiry,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
+	)
+	return i, err
+}
+
 const getURLByShortID = `-- name: GetURLByShortID :one
 SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls WHERE short_id = $1 AND is_active = TRUE
 `

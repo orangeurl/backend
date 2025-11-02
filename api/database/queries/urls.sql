@@ -3,6 +3,9 @@ INSERT INTO urls (user_id, short_id, original_url, expiry, is_active, password_h
 VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
+-- name: GetURL :one
+SELECT * FROM urls WHERE id = $1;
+
 -- name: GetURLByShortID :one
 SELECT * FROM urls WHERE short_id = $1 AND is_active = TRUE;
 
