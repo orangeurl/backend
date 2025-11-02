@@ -23,10 +23,10 @@ dev-down: ## Stop development environment
 
 # Production commands
 build: ## Build production images
-	docker compose build
+	docker compose --env-file .env build
 
 up: ## Start production environment
-	docker compose up -d
+	docker compose --env-file .env up -d
 
 down: ## Stop production environment
 	docker compose down
