@@ -1,13 +1,16 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
+	"fmt"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	svix "github.com/svix/svix-webhooks/go"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
@@ -311,35 +314,33 @@ func verifyWebhookSignature(c *fiber.Ctx) bool {
 
 	log.Printf("[Webhook] Found Svix headers - ID: %s, Timestamp: %s", svixID, svixTimestamp)
 
-	// TEMPORARY: Skip verification for now - will fix later
-	// The Svix library verification is having issues with Fiber
-	skipVerification := os.Getenv("SKIP_WEBHOOK_VERIFICATION")
-	if skipVerification == "true" {
-		log.Printf("[Webhook] ⚠️  Signature verification SKIPPED (SKIP_WEBHOOK_VERIFICATION=true)")
-		return true
-	}
-
-	// Create Svix webhook instance
-	wh, err := svix.NewWebhook(webhookSecret)
-	if err != nil {
-		log.Printf("[Webhook] Failed to create Svix webhook verifier: %v", err)
+	// Manual HMAC-SHA256 verification (Svix standard)
+	// The signature format is: "v1,<base64_signature>"
+	signatureParts := strings.Split(svixSignature, ",")
+	if len(signatureParts) != 2 || signatureParts[0] != "v1" {
+		log.Printf("[Webhook] Invalid signature format: %s", svixSignature)
 		return false
 	}
 
-	// Verify the webhook signature
-	headers := map[string][]string{
-		"svix-id":        {svixID},
-		"svix-timestamp": {svixTimestamp},
-		"svix-signature": {svixSignature},
-	}
+	expectedSignature := signatureParts[1]
 
+	// Remove 'whsec_' prefix from webhook secret if present
+	secret := strings.TrimPrefix(webhookSecret, "whsec_")
+
+	// Create the signed content: "{msg_id}.{timestamp}.{body}"
 	payload := c.Body()
-	log.Printf("[Webhook] Verifying payload of length %d bytes", len(payload))
+	signedContent := fmt.Sprintf("%s.%s.%s", svixID, svixTimestamp, string(payload))
 
-	err = wh.Verify(payload, headers)
-	if err != nil {
-		log.Printf("[Webhook] Signature verification failed: %v", err)
-		log.Printf("[Webhook] Secret length: %d, Headers: %+v", len(webhookSecret), headers)
+	// Compute HMAC-SHA256
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(signedContent))
+	computedSignature := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
+	// Compare signatures
+	if !hmac.Equal([]byte(computedSignature), []byte(expectedSignature)) {
+		log.Printf("[Webhook] ❌ Signature verification FAILED")
+		log.Printf("[Webhook] Expected: %s", expectedSignature)
+		log.Printf("[Webhook] Computed: %s", computedSignature)
 		return false
 	}
 

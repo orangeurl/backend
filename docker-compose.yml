@@ -19,7 +19,7 @@ services:
       - DB_PASS=
       - POSTGRES_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
       - DATABASE_URL=postgres://orangeurl:orangeurl123@postgres:5432/orangeurl?sslmode=disable
-      - SKIP_WEBHOOK_VERIFICATION=true
+      - CLERK_WEBHOOK_SECRET=${CLERK_WEBHOOK_SECRET}
     build: api
     ports:
       - "3000:3000"
