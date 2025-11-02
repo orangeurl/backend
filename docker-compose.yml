@@ -29,6 +29,8 @@ services:
     build: api
     ports:
       - "3000:3000"
+    volumes:
+      - ./geo-data:/app/geo-data
     depends_on:
       postgres:
         condition: service_healthy
