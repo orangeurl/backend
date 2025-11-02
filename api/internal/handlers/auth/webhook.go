@@ -327,12 +327,19 @@ func verifyWebhookSignature(c *fiber.Ctx) bool {
 	// Remove 'whsec_' prefix from webhook secret if present
 	secret := strings.TrimPrefix(webhookSecret, "whsec_")
 
+	// Decode the base64-encoded secret (Svix secrets are base64-encoded)
+	decodedSecret, err := base64.StdEncoding.DecodeString(secret)
+	if err != nil {
+		log.Printf("[Webhook] Failed to decode webhook secret: %v", err)
+		return false
+	}
+
 	// Create the signed content: "{msg_id}.{timestamp}.{body}"
 	payload := c.Body()
 	signedContent := fmt.Sprintf("%s.%s.%s", svixID, svixTimestamp, string(payload))
 
-	// Compute HMAC-SHA256
-	h := hmac.New(sha256.New, []byte(secret))
+	// Compute HMAC-SHA256 using the decoded secret
+	h := hmac.New(sha256.New, decodedSecret)
 	h.Write([]byte(signedContent))
 	computedSignature := base64.StdEncoding.EncodeToString(h.Sum(nil))
 
