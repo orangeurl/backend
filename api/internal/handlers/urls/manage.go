@@ -10,7 +10,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 )
 
-// DeleteURL soft-deletes a URL (sets is_active to false)
+// DeleteURL soft-deletes a URL (sets is_active to false) and removes from Redis
 func DeleteURL(c *fiber.Ctx) error {
 	user, err := middleware.GetUserFromContext(c)
 	if err != nil {
@@ -28,22 +28,41 @@ func DeleteURL(c *fiber.Ctx) error {
 	}
 
 	queries := database.GetQueries()
+
+	// First, get the URL record to obtain the short_id before deleting
+	urlRecord, err := queries.GetURL(c.Context(), parsedID)
+	if err != nil {
+		log.Printf("[DeleteURL] Error getting URL: %v", err)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
+	}
+
+	// Verify ownership
+	if urlRecord.UserID != user.ID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	// Delete from PostgreSQL (soft delete)
 	err = queries.DeleteURL(c.Context(), database.DeleteURLParams{
 		ID:     parsedID,
 		UserID: user.ID,
 	})
 
 	if err != nil {
-		log.Printf("[DeleteURL] Error: %v", err)
+		log.Printf("[DeleteURL] Error deleting from PostgreSQL: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete URL"})
 	}
 
-	// Also remove from Redis if exists
-	urlRecord, _ := queries.GetURLByShortID(c.Context(), urlID)
+	// Remove from Redis cache
 	if urlRecord.ShortID != "" {
 		redisClient := database.CreateClient(0)
 		defer redisClient.Close()
-		redisClient.Del(database.Ctx, urlRecord.ShortID)
+
+		delResult := redisClient.Del(database.Ctx, urlRecord.ShortID)
+		if delResult.Err() != nil {
+			log.Printf("[DeleteURL] Warning: Failed to delete from Redis: %v", delResult.Err())
+		} else {
+			log.Printf("[DeleteURL] Successfully deleted '%s' from Redis", urlRecord.ShortID)
+		}
 	}
 
 	return c.JSON(fiber.Map{"message": "URL deleted successfully"})
