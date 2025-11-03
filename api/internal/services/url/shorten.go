@@ -194,35 +194,6 @@ func ShortenURL(c *fiber.Ctx) error {
 				})
 			}
 
-			// Check if user already has a shortened URL for this exact original URL
-			// This prevents duplicate URLs when AI toggle is used multiple times
-			if userErr == nil {
-				queries := database.GetQueries()
-				if queries != nil {
-					existingURL, err := queries.GetUserURLByOriginalURL(c.Context(), database.GetUserURLByOriginalURLParams{
-						UserID:      user.ID,
-						OriginalUrl: body.URL,
-					})
-					if err == nil {
-						// URL already exists, return the existing one
-						log.Printf("[ShortenURL] URL already shortened by user: %s", existingURL.ShortID)
-						ttl, _ := time.ParseDuration("0s")
-						publicHost := os.Getenv("PUBLIC_HOST")
-						if publicHost == "" {
-							publicHost = "orangeurl.live"
-						}
-
-						return c.Status(fiber.StatusOK).JSON(response{
-							URL:             body.URL,
-							CustomShort:     publicHost + "/" + existingURL.ShortID,
-							Expiry:          ttl,
-							XRateRemaining:  0,
-							XRateLimitReset: 0,
-						})
-					}
-				}
-			}
-
 			// Pro & Premium: Use Gemini AI for intelligent generation
 			log.Printf("[ShortenURL] %s user - using Gemini AI generation", userTier)
 			aiID, err := ai.GenerateSmartShortID(body.URL, true)

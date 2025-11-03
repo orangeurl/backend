@@ -38,6 +38,9 @@ func setupRoutes(app *fiber.App) {
 	// URL shortening with optional auth (saves to user account if authenticated)
 	app.Post("/api/v1", middleware.OptionalAuth(), urlService.ShortenURL)
 
+	// AI suggestion endpoint (requires auth - Pro/Premium feature)
+	app.Post("/api/v1/suggest", middleware.RequireAuth(), urls.SuggestShortID)
+
 	// Webhook routes (public - no auth required, but rate limited)
 	app.Post("/api/webhooks/clerk", middleware.WebhookRateLimit(), auth.HandleClerkWebhook)
 	app.Post("/api/webhooks/dodo", middleware.WebhookRateLimit(), payment.HandleDodoWebhook)
