@@ -237,6 +237,12 @@ func ResolveURL(c *fiber.Ctx) error {
 		referer := c.Get("Referer")
 		ipAddress := c.IP()
 
+		// Extract the first IP if multiple IPs are present (X-Forwarded-For can have multiple IPs)
+		// Format: "client_ip, proxy1_ip, proxy2_ip"
+		if idx := strings.Index(ipAddress, ","); idx != -1 {
+			ipAddress = strings.TrimSpace(ipAddress[:idx])
+		}
+
 		// Parse user agent data
 		deviceType := parseDeviceType(userAgent)
 		browser := parseBrowser(userAgent)
