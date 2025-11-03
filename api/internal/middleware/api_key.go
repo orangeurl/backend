@@ -129,3 +129,48 @@ func GetAPIKeyFromContext(c *fiber.Ctx) (database.ApiKey, error) {
 	}
 	return apiKey, nil
 }
+
+// RequirePermission checks if the API key has a specific permission
+func RequirePermission(permission string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		apiKey, err := GetAPIKeyFromContext(c)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "API key required",
+			})
+		}
+
+		// Parse permissions from JSONB
+		var permissions []string
+		if apiKey.Permissions.Valid {
+			// Try to parse the JSON array
+			permStr := string(apiKey.Permissions.RawMessage)
+			// Remove brackets and quotes, split by comma
+			permStr = strings.Trim(permStr, "[]")
+			permStr = strings.ReplaceAll(permStr, "\"", "")
+			permStr = strings.ReplaceAll(permStr, " ", "")
+			if permStr != "" {
+				permissions = strings.Split(permStr, ",")
+			}
+		}
+
+		// Check if the required permission exists
+		hasPermission := false
+		for _, perm := range permissions {
+			if perm == permission {
+				hasPermission = true
+				break
+			}
+		}
+
+		if !hasPermission {
+			log.Printf("[API Auth] Permission denied: required '%s', API key has %v", permission, permissions)
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Insufficient permissions. Required: " + permission,
+			})
+		}
+
+		log.Printf("[API Auth] Permission granted: %s", permission)
+		return c.Next()
+	}
+}

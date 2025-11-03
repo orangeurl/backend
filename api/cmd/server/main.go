@@ -112,13 +112,26 @@ func setupRoutes(app *fiber.App) {
 
 	// Public API (v1) - Requires API Key + Rate Limiting
 	apiV1 := app.Group("/api/v1", middleware.RequireAPIKey(), middleware.APIRateLimit())
-	apiV1.Post("/urls", urlService.ShortenURL)
-	apiV1.Get("/urls", tracking.GetAllURLs)
-	apiV1.Get("/urls/:shortId", urls.GetURLDetails)
-	apiV1.Delete("/urls/:shortId", urls.DeleteURL)
-	apiV1.Put("/urls/:shortId", urls.UpdateURL)
-	apiV1.Get("/analytics/urls/:shortId", dashboard.GetURLAnalytics)
-	apiV1.Get("/analytics/overview", dashboard.GetDashboardStats)
+
+	// URL operations with permission checks
+	apiV1.Post("/urls", middleware.RequirePermission("urls:write"), urlService.ShortenURL)
+	apiV1.Get("/urls", middleware.RequirePermission("urls:read"), tracking.GetAllURLs)
+	apiV1.Get("/urls/:shortId", middleware.RequirePermission("urls:read"), urls.GetURLDetails)
+	apiV1.Delete("/urls/:shortId", middleware.RequirePermission("urls:write"), urls.DeleteURL)
+	apiV1.Put("/urls/:shortId", middleware.RequirePermission("urls:write"), urls.UpdateURL)
+
+	// Analytics operations with permission checks
+	apiV1.Get("/analytics/urls/:shortId", middleware.RequirePermission("analytics:read"), dashboard.GetURLAnalytics)
+	apiV1.Get("/analytics/overview", middleware.RequirePermission("analytics:read"), dashboard.GetDashboardStats)
+
+	// Webhook operations with permission checks (API key-based)
+	apiV1.Get("/webhooks", middleware.RequirePermission("webhooks:read"), webhooks.ListWebhooks)
+	apiV1.Post("/webhooks", middleware.RequirePermission("webhooks:write"), webhooks.CreateWebhook)
+	apiV1.Put("/webhooks/:id", middleware.RequirePermission("webhooks:write"), webhooks.UpdateWebhook)
+	apiV1.Delete("/webhooks/:id", middleware.RequirePermission("webhooks:write"), webhooks.DeleteWebhook)
+	apiV1.Put("/webhooks/:id/toggle", middleware.RequirePermission("webhooks:write"), webhooks.ToggleWebhook)
+
+	// Account info (no special permission needed, just valid API key)
 	apiV1.Get("/account", getAPIKeyAccount)
 }
 
