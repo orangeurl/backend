@@ -20,20 +20,26 @@ func CreateTeam(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
 	}
 
-	// Check if user is premium
-	var tier string
-	err = database.DB.QueryRowContext(c.Context(),
-		"SELECT tier FROM subscriptions WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1",
-		user.ID).Scan(&tier)
-
-	if err != nil || tier != "premium" {
+	// Check if user is premium - use plan_id from subscriptions or user's subscription_tier
+	queries := database.GetQueries()
+	tier := user.SubscriptionTier
+	
+	// Try to get active subscription
+	subscription, err := queries.GetUserSubscription(c.Context(), user.ID)
+	if err == nil && subscription.PlanID != "" {
+		tier = subscription.PlanID
+	}
+	
+	// Normalize to lowercase for comparison
+	tier = strings.ToLower(tier)
+	
+	if tier != "premium" {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": "Team collaboration is only available for Premium users",
 		})
 	}
 
 	// Check if user already has a team
-	queries := database.GetQueries()
 	_, err = queries.GetTeamByOwnerID(c.Context(), user.ID)
 	if err == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
