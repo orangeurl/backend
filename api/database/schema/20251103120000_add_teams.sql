@@ -24,12 +24,12 @@ CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_urls_team_id ON urls(team_id);
 
 CREATE OR REPLACE FUNCTION update_teams_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS $func$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$func$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_update_teams_updated_at
     BEFORE UPDATE ON teams
