@@ -1,0 +1,813 @@
+openapi: 3.0.3
+info:
+  title: OrangeURL API
+  description: |
+    OrangeURL is a modern URL shortener with advanced analytics and API access.
+
+    ## Authentication
+
+    The API supports two authentication methods:
+
+    1. **API Keys** (Recommended for programmatic access)
+       - Include in header: `Authorization: Bearer oran_live_<key>`
+       - Or: `X-API-Key: oran_live_<key>`
+
+    2. **JWT Tokens** (For user dashboard access)
+       - Include in header: `Authorization: Bearer <jwt-token>`
+
+    ## Rate Limiting
+
+    Rate limits are based on your subscription tier:
+
+    | Tier    | Rate Limit          |
+    |---------|---------------------|
+    | Free    | 100 requests/hour   |
+    | Pro     | 1,000 requests/hour |
+    | Premium | 10,000 requests/hour|
+
+    Rate limit headers are included in all responses:
+    - `X-RateLimit-Limit`: Your rate limit
+    - `X-RateLimit-Remaining`: Remaining requests
+    - `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+    ## Webhooks
+
+    Configure webhooks to receive real-time notifications about URL events:
+
+    - `url.created`: When a new short URL is created
+    - `url.clicked`: When a short URL is accessed
+    - `url.deleted`: When a short URL is deleted
+    - `url.expired`: When a short URL expires
+
+    Webhook payloads are signed with HMAC-SHA256. Verify the signature using the `X-OrangeURL-Signature` header.
+
+  version: 1.0.0
+  contact:
+    name: OrangeURL Support
+    url: https://orangeurl.live
+    email: support@orangeurl.live
+  license:
+    name: Proprietary
+    url: https://orangeurl.live/terms
+
+servers:
+  - url: https://api.orangeurl.live
+    description: Production server
+  - url: http://localhost:3000
+    description: Development server
+
+tags:
+  - name: URLs
+    description: Create and manage short URLs
+  - name: Analytics
+    description: Access click analytics and statistics
+  - name: API Keys
+    description: Manage API keys for programmatic access
+  - name: Webhooks
+    description: Configure webhook endpoints for events
+  - name: Account
+    description: Account information and usage
+
+paths:
+  # URL Endpoints
+  /api/v1/urls:
+    post:
+      tags: [URLs]
+      summary: Create a short URL
+      description: Creates a new short URL. Supports custom short IDs, expiration, and password protection.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: "https://example.com/very/long/url"
+                  description: The original URL to shorten
+                custom_short:
+                  type: string
+                  pattern: '^[a-zA-Z0-9_-]{3,20}$'
+                  example: "my-link"
+                  description: Optional custom short ID (alphanumeric, hyphens, underscores)
+                expiry:
+                  type: integer
+                  example: 24
+                  description: Expiration time in hours (null = never expires)
+                password:
+                  type: string
+                  example: "secret123"
+                  description: Optional password protection (Premium feature)
+      responses:
+        '201':
+          description: URL created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/URLResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    get:
+      tags: [URLs]
+      summary: List your short URLs
+      description: Returns a paginated list of all short URLs owned by the authenticated user.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Results per page
+      responses:
+        '200':
+          description: List of URLs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  urls:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/URLResponse'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/urls/{shortId}:
+    get:
+      tags: [URLs]
+      summary: Get URL details
+      description: Returns detailed information about a specific short URL.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ShortId'
+      responses:
+        '200':
+          description: URL details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/URLResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [URLs]
+      summary: Update URL
+      description: Update a short URL's properties (original URL, expiry, active status).
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ShortId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                original_url:
+                  type: string
+                  format: uri
+                expiry:
+                  type: string
+                  format: date-time
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: URL updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/URLResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [URLs]
+      summary: Delete URL
+      description: Permanently deletes a short URL and all its analytics data.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ShortId'
+      responses:
+        '200':
+          description: URL deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "URL deleted successfully"
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Analytics Endpoints
+  /api/v1/analytics/urls/{shortId}:
+    get:
+      tags: [Analytics]
+      summary: Get URL analytics
+      description: Returns detailed click analytics for a specific short URL.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ShortId'
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+          description: Number of days to fetch analytics for
+      responses:
+        '200':
+          description: URL analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/analytics/overview:
+    get:
+      tags: [Analytics]
+      summary: Get dashboard overview
+      description: Returns high-level statistics for all your URLs.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_urls:
+                    type: integer
+                    example: 42
+                  total_clicks:
+                    type: integer
+                    example: 1337
+                  active_urls:
+                    type: integer
+                    example: 38
+                  urls_created_this_month:
+                    type: integer
+                    example: 12
+
+  # API Key Management
+  /api/api-keys:
+    post:
+      tags: [API Keys]
+      summary: Create API key
+      description: Creates a new API key for programmatic access. The key is only shown once.
+      security:
+        - JwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Production Server"
+                  description: Friendly name for the API key
+                permissions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [urls:read, urls:write, analytics:read, webhooks:read, webhooks:write]
+                  example: ["urls:read", "urls:write", "analytics:read"]
+                expires_in:
+                  type: integer
+                  example: 365
+                  description: Days until expiration (null = never expires)
+      responses:
+        '201':
+          description: API key created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  api_key:
+                    type: string
+                    example: "oran_live_abcdefghijklmnopqrstuvwxyz123456"
+                    description: "⚠️ Store this securely - it will not be shown again!"
+                  prefix:
+                    type: string
+                    example: "oran_live_abcdefgh"
+                  created_at:
+                    type: string
+                    format: date-time
+
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      description: Returns all API keys for your account (keys are masked).
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/APIKeyListItem'
+                  count:
+                    type: integer
+
+  /api/api-keys/{id}:
+    put:
+      tags: [API Keys]
+      summary: Update API key
+      description: Update an API key's name or permissions.
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                permissions:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: API key updated
+
+    delete:
+      tags: [API Keys]
+      summary: Revoke API key
+      description: Permanently revokes an API key. This action cannot be undone.
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: API key revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "API key revoked successfully"
+
+  # Webhook Management
+  /api/webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Create webhook
+      description: Creates a new webhook endpoint. The secret is only shown once.
+      security:
+        - JwtAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+                - events
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  example: "https://myapp.com/webhooks/orangeurl"
+                  description: Your webhook endpoint URL
+                events:
+                  type: array
+                  items:
+                    type: string
+                    enum: [url.created, url.clicked, url.deleted, url.expired]
+                  example: ["url.created", "url.clicked"]
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  url:
+                    type: string
+                  events:
+                    type: array
+                    items:
+                      type: string
+                  secret:
+                    type: string
+                    example: "whsec_abcdef1234567890..."
+                    description: "⚠️ Store this securely - use it to verify webhook signatures!"
+                  is_active:
+                    type: boolean
+                  created_at:
+                    type: string
+                    format: date-time
+
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      description: Returns all webhooks for your account.
+      security:
+        - JwtAuth: []
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookListItem'
+                  count:
+                    type: integer
+
+  /api/webhooks/{id}:
+    put:
+      tags: [Webhooks]
+      summary: Update webhook
+      description: Update a webhook's URL or subscribed events.
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+                - events
+              properties:
+                url:
+                  type: string
+                  format: uri
+                events:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Webhook updated
+
+    delete:
+      tags: [Webhooks]
+      summary: Delete webhook
+      description: Permanently deletes a webhook endpoint.
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Webhook deleted
+
+  /api/webhooks/{id}/toggle:
+    put:
+      tags: [Webhooks]
+      summary: Enable/disable webhook
+      description: Toggle a webhook's active status without deleting it.
+      security:
+        - JwtAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - is_active
+              properties:
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Webhook toggled
+
+  # Account
+  /api/v1/account:
+    get:
+      tags: [Account]
+      summary: Get account info
+      description: Returns information about the API key owner's account.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Account information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                    format: email
+                  first_name:
+                    type: string
+                  last_name:
+                    type: string
+                  subscription_tier:
+                    type: string
+                    enum: [free, pro, premium]
+                  created_at:
+                    type: string
+                    format: date-time
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: "Use your API key: `Authorization: Bearer oran_live_<key>`"
+
+    JwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT token from Clerk authentication"
+
+  parameters:
+    ShortId:
+      name: shortId
+      in: path
+      required: true
+      description: The short ID of the URL
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9]{6}$'
+        example: "abc123"
+
+  schemas:
+    URLResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        short_id:
+          type: string
+          example: "abc123"
+        original_url:
+          type: string
+          format: uri
+        short_url:
+          type: string
+          example: "https://orangeurl.live/abc123"
+        is_active:
+          type: boolean
+        is_locked:
+          type: boolean
+          description: Whether the URL is password-protected
+        expiry:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AnalyticsResponse:
+      type: object
+      properties:
+        total_clicks:
+          type: integer
+        unique_visitors:
+          type: integer
+        clicks_by_date:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              clicks:
+                type: integer
+        clicks_by_country:
+          type: array
+          items:
+            type: object
+            properties:
+              country:
+                type: string
+              clicks:
+                type: integer
+        clicks_by_device:
+          type: object
+          properties:
+            mobile:
+              type: integer
+            desktop:
+              type: integer
+            tablet:
+              type: integer
+        clicks_by_browser:
+          type: array
+          items:
+            type: object
+            properties:
+              browser:
+                type: string
+              clicks:
+                type: integer
+
+    APIKeyListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+          example: "oran_live_abcdefgh"
+        permissions:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    WebhookListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+
+  responses:
+    BadRequest:
+      description: Bad request - Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized - Invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Rate limit exceeded"
+              limit:
+                type: integer
+                example: 100
+              reset:
+                type: integer
+                example: 1699008000
+                description: Unix timestamp when limit resets

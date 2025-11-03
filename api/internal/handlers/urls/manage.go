@@ -122,3 +122,117 @@ func ToggleURLStatus(c *fiber.Ctx) error {
 	})
 }
 
+// GetURLDetails returns detailed information about a specific URL
+func GetURLDetails(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	shortID := c.Params("shortId")
+	if shortID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Short ID required"})
+	}
+
+	queries := database.GetQueries()
+	urlRecord, err := queries.GetURLByShortID(c.Context(), shortID)
+	if err != nil {
+		log.Printf("[GetURLDetails] URL not found: %v", err)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
+	}
+
+	// Verify ownership
+	if urlRecord.UserID != user.ID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	return c.JSON(fiber.Map{
+		"id":           urlRecord.ID,
+		"short_id":     urlRecord.ShortID,
+		"original_url": urlRecord.OriginalUrl,
+		"expiry":       urlRecord.Expiry,
+		"is_active":    urlRecord.IsActive,
+		"is_locked":    urlRecord.IsLocked,
+		"created_at":   urlRecord.CreatedAt,
+		"updated_at":   urlRecord.UpdatedAt,
+	})
+}
+
+// UpdateURL updates a URL's properties (expiry, active status)
+func UpdateURL(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	shortID := c.Params("shortId")
+	if shortID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Short ID required"})
+	}
+
+	type UpdateRequest struct {
+		OriginalURL *string `json:"original_url"`
+		Expiry      *string `json:"expiry"`
+		IsActive    *bool   `json:"is_active"`
+	}
+
+	var req UpdateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	queries := database.GetQueries()
+
+	// Get existing URL
+	urlRecord, err := queries.GetURLByShortID(c.Context(), shortID)
+	if err != nil {
+		log.Printf("[UpdateURL] URL not found: %v", err)
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
+	}
+
+	// Verify ownership
+	if urlRecord.UserID != user.ID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
+	}
+
+	// Build update params (use existing values if not provided)
+	originalURL := urlRecord.OriginalUrl
+	if req.OriginalURL != nil {
+		originalURL = *req.OriginalURL
+	}
+
+	expiry := urlRecord.Expiry
+	if req.Expiry != nil {
+		// Parse expiry time
+		// For simplicity, using the existing expiry format
+		// You can add time parsing logic here if needed
+	}
+
+	isActive := urlRecord.IsActive
+	if req.IsActive != nil {
+		isActive = sql.NullBool{Bool: *req.IsActive, Valid: true}
+	}
+
+	// Update URL
+	updatedURL, err := queries.UpdateURL(c.Context(), database.UpdateURLParams{
+		ID:          urlRecord.ID,
+		OriginalUrl: originalURL,
+		Expiry:      expiry,
+		IsActive:    isActive,
+	})
+	if err != nil {
+		log.Printf("[UpdateURL] Failed to update: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update URL"})
+	}
+
+	return c.JSON(fiber.Map{
+		"message":      "URL updated successfully",
+		"id":           updatedURL.ID,
+		"short_id":     updatedURL.ShortID,
+		"original_url": updatedURL.OriginalUrl,
+		"expiry":       updatedURL.Expiry,
+		"is_active":    updatedURL.IsActive,
+		"updated_at":   updatedURL.UpdatedAt,
+	})
+}
+

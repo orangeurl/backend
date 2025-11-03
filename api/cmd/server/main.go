@@ -12,17 +12,37 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/analytics"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/api_keys"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/auth"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/dashboard"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/docs"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/payment"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/webhooks"
 	"github.com/xenonnn4w/orangeurl/internal/jobs"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 	"github.com/xenonnn4w/orangeurl/internal/routes"
 	"github.com/xenonnn4w/orangeurl/internal/services/tracking"
 	urlService "github.com/xenonnn4w/orangeurl/internal/services/url"
 )
+
+// getAPIKeyAccount returns account info for API key owner
+func getAPIKeyAccount(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	return c.JSON(fiber.Map{
+		"id":                user.ID,
+		"email":             user.Email,
+		"first_name":        user.FirstName,
+		"last_name":         user.LastName,
+		"subscription_tier": user.SubscriptionTier,
+		"created_at":        user.CreatedAt,
+	})
+}
 
 func setupRoutes(app *fiber.App) {
 	// Health check
@@ -33,6 +53,10 @@ func setupRoutes(app *fiber.App) {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "healthy"})
 	})
+
+	// API Documentation
+	app.Get("/docs", docs.ServeSwaggerUI)
+	app.Get("/docs/openapi.yaml", docs.ServeOpenAPISpec)
 
 	// Public routes
 	app.Get("/:url", middleware.PasswordProtectionMiddleware, routes.ResolveURL)
@@ -72,6 +96,30 @@ func setupRoutes(app *fiber.App) {
 
 	// Public unlock endpoint (no auth required, but rate limited to prevent brute force)
 	app.Post("/api/unlock/:shortId", middleware.AuthRateLimit(), urls.UnlockURL)
+
+	// API Key Management (requires JWT auth)
+	api.Post("/api-keys", middleware.RequireAuth(), api_keys.CreateAPIKey)
+	api.Get("/api-keys", middleware.RequireAuth(), api_keys.ListAPIKeys)
+	api.Put("/api-keys/:id", middleware.RequireAuth(), api_keys.UpdateAPIKey)
+	api.Delete("/api-keys/:id", middleware.RequireAuth(), api_keys.DeleteAPIKey)
+
+	// Webhook Management (requires JWT auth)
+	api.Post("/webhooks", middleware.RequireAuth(), webhooks.CreateWebhook)
+	api.Get("/webhooks", middleware.RequireAuth(), webhooks.ListWebhooks)
+	api.Put("/webhooks/:id", middleware.RequireAuth(), webhooks.UpdateWebhook)
+	api.Delete("/webhooks/:id", middleware.RequireAuth(), webhooks.DeleteWebhook)
+	api.Put("/webhooks/:id/toggle", middleware.RequireAuth(), webhooks.ToggleWebhook)
+
+	// Public API (v1) - Requires API Key + Rate Limiting
+	apiV1 := app.Group("/api/v1", middleware.RequireAPIKey(), middleware.APIRateLimit())
+	apiV1.Post("/urls", urlService.ShortenURL)
+	apiV1.Get("/urls", tracking.GetAllURLs)
+	apiV1.Get("/urls/:shortId", urls.GetURLDetails)
+	apiV1.Delete("/urls/:shortId", urls.DeleteURL)
+	apiV1.Put("/urls/:shortId", urls.UpdateURL)
+	apiV1.Get("/analytics/urls/:shortId", dashboard.GetURLAnalytics)
+	apiV1.Get("/analytics/overview", dashboard.GetDashboardStats)
+	apiV1.Get("/account", getAPIKeyAccount)
 }
 
 func main() {

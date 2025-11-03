@@ -6,10 +6,26 @@ package database
 
 import (
 	"database/sql"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
+
+type ApiKey struct {
+	ID            uuid.UUID             `json:"id"`
+	UserID        uuid.UUID             `json:"user_id"`
+	KeyName       string                `json:"key_name"`
+	ApiKeyHash    string                `json:"api_key_hash"`
+	ApiKeyPrefix  string                `json:"api_key_prefix"`
+	Permissions   pqtype.NullRawMessage `json:"permissions"`
+	RateLimitTier string                `json:"rate_limit_tier"`
+	LastUsedAt    sql.NullTime          `json:"last_used_at"`
+	IsActive      sql.NullBool          `json:"is_active"`
+	ExpiresAt     sql.NullTime          `json:"expires_at"`
+	CreatedAt     sql.NullTime          `json:"created_at"`
+	UpdatedAt     sql.NullTime          `json:"updated_at"`
+}
 
 type BioLinkClick struct {
 	ID        uuid.UUID      `json:"id"`
@@ -144,4 +160,28 @@ type Waitlist struct {
 	ID        uuid.UUID    `json:"id"`
 	Email     string       `json:"email"`
 	CreatedAt sql.NullTime `json:"created_at"`
+}
+
+type Webhook struct {
+	ID        uuid.UUID    `json:"id"`
+	UserID    uuid.UUID    `json:"user_id"`
+	Url       string       `json:"url"`
+	Events    []string     `json:"events"`
+	Secret    string       `json:"secret"`
+	IsActive  sql.NullBool `json:"is_active"`
+	CreatedAt sql.NullTime `json:"created_at"`
+	UpdatedAt sql.NullTime `json:"updated_at"`
+}
+
+type WebhookDelivery struct {
+	ID            uuid.UUID       `json:"id"`
+	WebhookID     uuid.UUID       `json:"webhook_id"`
+	EventType     string          `json:"event_type"`
+	Payload       json.RawMessage `json:"payload"`
+	Status        string          `json:"status"`
+	Attempts      sql.NullInt32   `json:"attempts"`
+	ResponseCode  sql.NullInt32   `json:"response_code"`
+	ResponseBody  sql.NullString  `json:"response_body"`
+	LastAttemptAt sql.NullTime    `json:"last_attempt_at"`
+	CreatedAt     sql.NullTime    `json:"created_at"`
 }
