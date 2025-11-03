@@ -2,15 +2,18 @@ package ai
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -111,56 +114,214 @@ func extractTitleFromHTML(body io.Reader) string {
 	return ""
 }
 
-// generateFromMetadata creates short ID using local logic (FREE)
+// generateFromMetadata creates short ID using local logic with intelligent abbreviation
 func generateFromMetadata(metadata *URLMetadata) string {
-	// Strategy 1: Use keywords if available
+	// Strategy 1: Intelligent abbreviation from page title (best quality)
+	if metadata.PageTitle != "" {
+		abbreviated := abbreviateText(metadata.PageTitle, metadata.Domain)
+		if len(abbreviated) >= 3 && len(abbreviated) <= 6 {
+			return abbreviated
+		}
+	}
+
+	// Strategy 2: Abbreviate from keywords
 	if len(metadata.Keywords) > 0 {
-		// Take first 2-3 keywords, max 10 chars total
+		// Take first 1-2 keywords and abbreviate intelligently
 		words := metadata.Keywords
-		if len(words) > 3 {
-			words = words[:3]
+		if len(words) > 2 {
+			words = words[:2]
 		}
 
-		result := strings.Join(words, "")
-		result = toPascalCase(result)
-
-		// Ensure length is between 6-10 characters
-		if len(result) > 10 {
-			result = result[:10]
-		}
-		if len(result) >= 6 {
+		result := abbreviateKeywords(words)
+		if len(result) >= 3 && len(result) <= 6 {
 			return result
 		}
 	}
 
-	// Strategy 2: Use last path segment
-	if len(metadata.PathSegments) > 0 && metadata.PathSegments[0] != "" {
-		last := metadata.PathSegments[len(metadata.PathSegments)-1]
-		last = cleanString(last)
-		if len(last) > 3 {
-			cleaned := toPascalCase(last)
-			if len(cleaned) > 10 {
-				cleaned = cleaned[:10]
-			}
-			if len(cleaned) >= 6 {
-				return cleaned
+	// Strategy 3: Use path segment with abbreviation
+	if len(metadata.PathSegments) > 0 {
+		for i := len(metadata.PathSegments) - 1; i >= 0; i-- {
+			segment := cleanString(metadata.PathSegments[i])
+			if len(segment) > 2 {
+				abbreviated := abbreviateText(segment, "")
+				if len(abbreviated) >= 3 && len(abbreviated) <= 6 {
+					return abbreviated
+				}
 			}
 		}
 	}
 
-	// Strategy 3: Use domain name
+	// Strategy 4: Fallback - use domain initials + random suffix
 	domain := strings.TrimPrefix(metadata.Domain, "www.")
 	domain = strings.Split(domain, ".")[0]
-	domain = cleanString(domain)
-	result := toPascalCase(domain)
-	if len(result) < 6 {
-		result = result + "Link"
+	initials := getInitials(domain)
+	if len(initials) < 3 {
+		initials = initials + randomSuffix(3-len(initials))
 	}
-	if len(result) > 10 {
-		result = result[:10]
+	return initials
+}
+
+// abbreviateText intelligently abbreviates text by removing vowels or taking initials
+func abbreviateText(text string, excludeDomain string) string {
+	text = cleanString(text)
+	text = strings.ToLower(text)
+
+	// Remove domain name from title if present (e.g., "Title - YouTube" → "Title")
+	if excludeDomain != "" {
+		domainName := strings.Split(strings.TrimPrefix(excludeDomain, "www."), ".")[0]
+		text = strings.ReplaceAll(text, strings.ToLower(domainName), "")
+		text = strings.TrimSpace(strings.Trim(text, "-|–—"))
 	}
 
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return ""
+	}
+
+	// For single word: remove vowels intelligently
+	if len(words) == 1 {
+		return removeVowelsKeepStructure(words[0], 6)
+	}
+
+	// For multiple words: use initials + first letters
+	if len(words) >= 2 {
+		// Strategy A: First letters of first two words + number if present
+		result := ""
+		for i := 0; i < len(words) && len(result) < 6; i++ {
+			word := cleanString(words[i])
+			if word == "" {
+				continue
+			}
+			// If word is a number, add it
+			if isNumeric(word) {
+				result += word
+			} else {
+				// Take first 2-3 letters
+				takeLen := 2
+				if i == 0 {
+					takeLen = 3
+				}
+				if len(word) < takeLen {
+					takeLen = len(word)
+				}
+				result += word[:takeLen]
+			}
+		}
+		if len(result) >= 3 && len(result) <= 6 {
+			return toPascalCase(result)
+		}
+	}
+
+	// Fallback: take first 6 chars and remove vowels
+	combined := strings.Join(words, "")
+	return removeVowelsKeepStructure(combined, 6)
+}
+
+// abbreviateKeywords creates short form from keywords
+func abbreviateKeywords(keywords []string) string {
+	if len(keywords) == 0 {
+		return ""
+	}
+
+	// Take first letters of each keyword
+	result := ""
+	for _, word := range keywords {
+		if word == "" {
+			continue
+		}
+		result += string(word[0])
+		if len(word) > 1 {
+			result += string(word[1])
+		}
+		if len(result) >= 6 {
+			break
+		}
+	}
+
+	return toPascalCase(result[:min(len(result), 6)])
+}
+
+// removeVowelsKeepStructure removes vowels but keeps consonants and numbers
+func removeVowelsKeepStructure(text string, maxLen int) string {
+	vowels := "aeiouAEIOU"
+	result := ""
+
+	// First pass: keep all consonants and numbers
+	for _, ch := range text {
+		if !strings.ContainsRune(vowels, ch) && (unicode.IsLetter(ch) || unicode.IsDigit(ch)) {
+			result += string(ch)
+			if len(result) >= maxLen {
+				break
+			}
+		}
+	}
+
+	// If too short, add some vowels back
+	if len(result) < 3 {
+		for _, ch := range text {
+			if unicode.IsLetter(ch) || unicode.IsDigit(ch) {
+				if !strings.ContainsRune(result, ch) {
+					result += string(ch)
+					if len(result) >= maxLen {
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return toPascalCase(result[:min(len(result), maxLen)])
+}
+
+// getInitials extracts initials from text
+func getInitials(text string) string {
+	words := strings.FieldsFunc(cleanString(text), func(r rune) bool {
+		return r == '-' || r == '_' || unicode.IsSpace(r)
+	})
+	result := ""
+	for _, word := range words {
+		if len(word) > 0 {
+			result += string(unicode.ToUpper(rune(word[0])))
+			if len(result) >= 3 {
+				break
+			}
+		}
+	}
 	return result
+}
+
+// randomSuffix generates random alphanumeric suffix
+func randomSuffix(length int) string {
+	chars := "0123456789abcdefghijklmnopqrstuvwxyz"
+	result := ""
+	for i := 0; i < length; i++ {
+		result += string(chars[randInt(len(chars))])
+	}
+	return result
+}
+
+// randInt returns random int from 0 to max-1
+func randInt(max int) int {
+	n, _ := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	return int(n.Int64())
+}
+
+// min returns minimum of two ints
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// isNumeric checks if string is a number
+func isNumeric(s string) bool {
+	for _, ch := range s {
+		if !unicode.IsDigit(ch) {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // generateWithGemini uses Google Gemini Pro for intelligent generation (PREMIUM)
@@ -175,13 +336,13 @@ func generateWithGemini(targetURL string, metadata *URLMetadata, apiKey string) 
 	defer client.Close()
 
 	// Use Gemini 1.5 Flash (faster and cheaper than Pro)
-	model := client.GenerativeModel("gemini-1.5-flash-latest")
+	model := client.GenerativeModel("gemini-1.5-flash")
 
-	// Configure model
-	model.SetTemperature(0.7)
+	// Configure model for creativity and variety
+	model.SetTemperature(0.9) // Higher temperature for more variety
 	model.SetTopK(40)
 	model.SetTopP(0.95)
-	model.SetMaxOutputTokens(50)
+	model.SetMaxOutputTokens(20) // Short outputs only
 
 	// Build context-rich prompt
 	contextInfo := ""
@@ -195,16 +356,20 @@ func generateWithGemini(targetURL string, metadata *URLMetadata, apiKey string) 
 	prompt := fmt.Sprintf(`Generate a short, memorable URL slug for this URL: %s%s
 
 Requirements:
-- 6-10 characters long
-- Use PascalCase (e.g., CoolStuff, BlogPost, ShopNow)
-- Must be pronounceable and memorable
-- Based on the URL content/path/meaning
+- 4-6 characters MAXIMUM (strictly enforce this)
+- Mix of lowercase and uppercase letters (creative casing)
+- Must be UNIQUE and creative each time
+- Based on the page title and URL content, NOT the domain name
+- Abbreviate intelligently (e.g., "JavaScript Tutorial" → "JsTut" or "JScript")
 - Return ONLY the slug, no explanation or punctuation
 
 Examples:
-- https://blog.com/how-to-cook-pasta → CookPasta
-- https://shop.com/products/red-shoes → RedShoes
-- https://github.com/user/awesome-project → AwesomeProj
+- Blog post about cooking pasta (title: "How to Cook Perfect Pasta") → "PstaCk" or "CookIt"
+- YouTube video "10 JavaScript Tips" → "Js10" or "JsTips"
+- GitHub project "awesome-react-hooks" → "RctHks" or "AwsHks"
+- Google Search Console → "GscDash" or "SrchCn"
+
+Be creative and focus on the CONTENT, not the domain. Make it SHORT (max 6 chars).
 
 URL slug:`, targetURL, contextInfo)
 
@@ -223,7 +388,7 @@ URL slug:`, targetURL, contextInfo)
 	shortID := cleanAIResponse(generatedText)
 
 	// Validate result
-	if len(shortID) < 4 || len(shortID) > 12 {
+	if len(shortID) < 3 || len(shortID) > 6 {
 		return "", fmt.Errorf("invalid length from Gemini: %d chars", len(shortID))
 	}
 
