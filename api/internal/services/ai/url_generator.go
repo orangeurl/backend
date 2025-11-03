@@ -175,7 +175,7 @@ func generateWithGemini(targetURL string, metadata *URLMetadata, apiKey string) 
 	defer client.Close()
 
 	// Use Gemini 1.5 Flash (faster and cheaper than Pro)
-	model := client.GenerativeModel("gemini-1.5-flash")
+	model := client.GenerativeModel("gemini-1.5-flash-latest")
 
 	// Configure model
 	model.SetTemperature(0.7)

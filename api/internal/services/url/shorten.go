@@ -254,9 +254,34 @@ func ShortenURL(c *fiber.Ctx) error {
 	r := database.CreateClient(0)
 	defer r.Close()
 
+	// Check for collision and add retry logic for AI-generated IDs
 	val, _ = r.Get(database.Ctx, id).Result()
 	if val != "" {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "URL already taken"})
+		// If this was an AI-generated ID and it collided, try adding a random suffix
+		if body.UseAI && body.CustomShort == "" {
+			maxRetries := 5
+			originalID := id
+			for i := 0; i < maxRetries; i++ {
+				// Add random 1-2 character suffix
+				suffix := generateShortID(2)
+				id = originalID + suffix
+				if len(id) > 10 {
+					id = id[:10] // Keep max 10 chars
+				}
+
+				val, _ = r.Get(database.Ctx, id).Result()
+				if val == "" {
+					log.Printf("[ShortenURL] AI ID collision resolved: %s -> %s", originalID, id)
+					break
+				}
+
+				if i == maxRetries-1 {
+					return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "URL already taken"})
+				}
+			}
+		} else {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "URL already taken"})
+		}
 	}
 
 	// checking the expiry - set based on user tier
