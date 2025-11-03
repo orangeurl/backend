@@ -75,21 +75,31 @@ func extractMetadata(targetURL string) (*URLMetadata, error) {
 		PathSegments: strings.Split(strings.Trim(parsed.Path, "/"), "/"),
 	}
 
-	// Try to fetch page title (with timeout) - optional enhancement
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	// Special handling for YouTube URLs
+	if isYouTubeURL(parsed.Host) {
+		metadata.PageTitle = extractYouTubeTitle(targetURL)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
-	if err == nil {
-		req.Header.Set("User-Agent", "OrangeURL-Bot/1.0")
+	// If YouTube title extraction failed or it's not YouTube, try generic HTML fetch
+	if metadata.PageTitle == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-		client := &http.Client{Timeout: 3 * time.Second}
-		resp, err := client.Do(req)
-		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
-			metadata.PageTitle = extractTitleFromHTML(resp.Body)
+		req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
+		if err == nil {
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+			client := &http.Client{Timeout: 5 * time.Second}
+			resp, err := client.Do(req)
+			if err == nil && resp.StatusCode == 200 {
+				defer resp.Body.Close()
+				metadata.PageTitle = extractTitleFromHTML(resp.Body)
+			}
 		}
 	}
+
+	// Filter out generic path segments like "watch", "video", "post", etc.
+	metadata.PathSegments = filterGenericSegments(metadata.PathSegments)
 
 	// Extract keywords from path
 	metadata.Keywords = extractKeywords(metadata.PathSegments, metadata.PageTitle)
@@ -97,21 +107,110 @@ func extractMetadata(targetURL string) (*URLMetadata, error) {
 	return metadata, nil
 }
 
-// extractTitleFromHTML extracts <title> tag from HTML
-func extractTitleFromHTML(body io.Reader) string {
-	// Read first 5KB only (title is usually in head)
-	buf := make([]byte, 5120)
-	n, _ := body.Read(buf)
-	html := string(buf[:n])
+// isYouTubeURL checks if the URL is a YouTube URL
+func isYouTubeURL(host string) bool {
+	return strings.Contains(host, "youtube.com") || strings.Contains(host, "youtu.be")
+}
 
-	// Extract title using regex
-	re := regexp.MustCompile(`<title[^>]*>(.*?)</title>`)
-	matches := re.FindStringSubmatch(html)
+// extractYouTubeTitle uses YouTube oEmbed API to get video title
+func extractYouTubeTitle(videoURL string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Use YouTube oEmbed API - no API key required
+	oembedURL := fmt.Sprintf("https://www.youtube.com/oembed?url=%s&format=json", url.QueryEscape(videoURL))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", oembedURL, nil)
+	if err != nil {
+		log.Printf("[AI] Failed to create YouTube oEmbed request: %v", err)
+		return ""
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[AI] YouTube oEmbed request failed: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("[AI] YouTube oEmbed returned status: %d", resp.StatusCode)
+		return ""
+	}
+
+	// Parse JSON response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	// Simple JSON parsing for title field
+	re := regexp.MustCompile(`"title"\s*:\s*"([^"]+)"`)
+	matches := re.FindSubmatch(body)
 	if len(matches) > 1 {
-		return strings.TrimSpace(matches[1])
+		title := string(matches[1])
+		log.Printf("[AI] Extracted YouTube title: %s", title)
+		return title
 	}
 
 	return ""
+}
+
+// filterGenericSegments removes generic path segments that don't add value
+func filterGenericSegments(segments []string) []string {
+	genericWords := map[string]bool{
+		"watch": true, "video": true, "videos": true, "post": true, "posts": true,
+		"article": true, "articles": true, "page": true, "pages": true,
+		"view": true, "show": true, "index": true, "browse": true,
+		"search": true, "results": true, "category": true, "tag": true,
+	}
+
+	filtered := []string{}
+	for _, seg := range segments {
+		if seg != "" && !genericWords[strings.ToLower(seg)] {
+			filtered = append(filtered, seg)
+		}
+	}
+	return filtered
+}
+
+// extractTitleFromHTML extracts <title> tag from HTML
+func extractTitleFromHTML(body io.Reader) string {
+	// Read first 10KB (title is usually in head, but some sites have more)
+	buf := make([]byte, 10240)
+	n, _ := body.Read(buf)
+	html := string(buf[:n])
+
+	// Try <title> tag first
+	re := regexp.MustCompile(`<title[^>]*>(.*?)</title>`)
+	matches := re.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		title := strings.TrimSpace(matches[1])
+		// Decode HTML entities
+		title = decodeHTMLEntities(title)
+		return title
+	}
+
+	// Try og:title meta tag as fallback
+	ogRe := regexp.MustCompile(`<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']`)
+	ogMatches := ogRe.FindStringSubmatch(html)
+	if len(ogMatches) > 1 {
+		return strings.TrimSpace(ogMatches[1])
+	}
+
+	return ""
+}
+
+// decodeHTMLEntities decodes common HTML entities
+func decodeHTMLEntities(text string) string {
+	text = strings.ReplaceAll(text, "&amp;", "&")
+	text = strings.ReplaceAll(text, "&lt;", "<")
+	text = strings.ReplaceAll(text, "&gt;", ">")
+	text = strings.ReplaceAll(text, "&quot;", "\"")
+	text = strings.ReplaceAll(text, "&#39;", "'")
+	text = strings.ReplaceAll(text, "&apos;", "'")
+	return text
 }
 
 // generateFromMetadata creates short ID using local logic with intelligent abbreviation
