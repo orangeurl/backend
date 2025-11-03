@@ -161,11 +161,12 @@ func ShortenURL(c *fiber.Ctx) error {
 	if body.CustomShort == "" {
 		// Check if AI generation is requested
 		if body.UseAI {
-			// AI-powered generation (Premium feature)
+			// AI-powered generation (Pro/Premium feature ONLY)
 			log.Printf("[ShortenURL] AI generation requested for URL: %s", body.URL)
 
-			// Check if user is authenticated and Premium tier
+			// Check if user is authenticated and has Pro or Premium tier
 			user, userErr := middleware.GetUserFromContext(c)
+			userTier := "free"
 			canUseAI := false
 
 			if userErr == nil {
@@ -173,38 +174,46 @@ func ShortenURL(c *fiber.Ctx) error {
 				if queries != nil {
 					userDetails, err := queries.GetUserByID(c.Context(), user.ID)
 					if err == nil {
-						// Check user tier - only Premium users can use AI
-						tier := userDetails.SubscriptionTier
-						if tier == "premium" {
+						userTier = userDetails.SubscriptionTier
+
+						// Both Pro and Premium users get full Gemini AI
+						if userTier == "pro" || userTier == "premium" {
 							canUseAI = true
 						}
 					}
 				}
 			}
 
-			if canUseAI {
-				// Use Gemini Pro for intelligent generation
-				aiID, err := ai.GenerateSmartShortID(body.URL, true)
-				if err != nil {
-					log.Printf("[ShortenURL] AI generation failed: %v, falling back to random", err)
-					id = generateShortID(shortURLLength)
-				} else {
-					id = aiID
-					log.Printf("[ShortenURL] AI generated ID: %s", id)
-				}
-			} else {
-				// Free/Pro users: use local smart generation (no AI)
-				log.Printf("[ShortenURL] Using local smart generation (user not Premium)")
-				smartID, err := ai.GenerateSmartShortID(body.URL, false)
-				if err != nil {
-					log.Printf("[ShortenURL] Smart generation failed: %v, using random", err)
+			if !canUseAI {
+				// Free users: AI feature not available
+				log.Printf("[ShortenURL] AI generation denied - user tier: %s (requires Pro or Premium)", userTier)
+				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+					"error": "AI-powered URL generation is a Pro/Premium feature",
+					"upgrade_required": true,
+					"current_tier": userTier,
+				})
+			}
+
+			// Pro & Premium: Use Gemini AI for intelligent generation
+			log.Printf("[ShortenURL] %s user - using Gemini AI generation", userTier)
+			aiID, err := ai.GenerateSmartShortID(body.URL, true)
+			if err != nil {
+				log.Printf("[ShortenURL] Gemini AI failed: %v, falling back to local smart generation", err)
+				// Fallback to local smart generation
+				smartID, fallbackErr := ai.GenerateSmartShortID(body.URL, false)
+				if fallbackErr != nil {
+					log.Printf("[ShortenURL] Local smart generation also failed, using random")
 					id = generateShortID(shortURLLength)
 				} else {
 					id = smartID
+					log.Printf("[ShortenURL] Fallback local smart generated ID: %s", id)
 				}
+			} else {
+				id = aiID
+				log.Printf("[ShortenURL] Gemini AI generated ID: %s", id)
 			}
 		} else {
-			// Random generation (default)
+			// Random generation (default for all tiers)
 			id = generateShortID(shortURLLength)
 		}
 	} else {
