@@ -56,6 +56,19 @@ func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, erro
 	return i, err
 }
 
+const deactivateExpiredURLs = `-- name: DeactivateExpiredURLs :exec
+UPDATE urls
+SET is_active = FALSE, updated_at = NOW()
+WHERE expiry IS NOT NULL
+    AND expiry < $1
+    AND is_active = TRUE
+`
+
+func (q *Queries) DeactivateExpiredURLs(ctx context.Context, expiry sql.NullTime) error {
+	_, err := q.db.ExecContext(ctx, deactivateExpiredURLs, expiry)
+	return err
+}
+
 const deleteURL = `-- name: DeleteURL :exec
 UPDATE urls SET is_active = FALSE WHERE id = $1 AND user_id = $2
 `

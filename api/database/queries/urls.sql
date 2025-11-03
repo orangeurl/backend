@@ -62,3 +62,10 @@ WHERE user_id = $1
     AND original_url = $2
     AND is_active = TRUE
 LIMIT 1;
+
+-- name: DeactivateExpiredURLs :exec
+UPDATE urls
+SET is_active = FALSE, updated_at = NOW()
+WHERE expiry IS NOT NULL
+    AND expiry < $1
+    AND is_active = TRUE;

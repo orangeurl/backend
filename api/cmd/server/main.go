@@ -17,6 +17,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/payment"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
+	"github.com/xenonnn4w/orangeurl/internal/jobs"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 	"github.com/xenonnn4w/orangeurl/internal/routes"
 	"github.com/xenonnn4w/orangeurl/internal/services/tracking"
@@ -83,6 +84,9 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.ClosePostgres()
+
+	// Start background cleanup jobs
+	jobs.StartCleanupScheduler()
 
 	app := fiber.New(fiber.Config{
 		EnableTrustedProxyCheck: true,

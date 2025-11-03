@@ -68,16 +68,57 @@ func CleanupOldAnalytics() {
 	log.Println("[Cleanup] Analytics cleanup completed")
 }
 
-// StartCleanupScheduler runs cleanup job periodically
+// CleanupExpiredURLs deactivates URLs that have passed their expiry date
+func CleanupExpiredURLs() {
+	log.Println("[Cleanup] Starting expired URLs cleanup...")
+
+	queries := database.GetQueries()
+	if queries == nil {
+		log.Println("[Cleanup] Database not initialized, skipping cleanup")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Delete/deactivate URLs where expiry < NOW() and is_active = true
+	err := queries.DeactivateExpiredURLs(ctx, sql.NullTime{
+		Time:  time.Now(),
+		Valid: true,
+	})
+
+	if err != nil {
+		log.Printf("[Cleanup] Error deactivating expired URLs: %v", err)
+		return
+	}
+
+	log.Println("[Cleanup] Expired URLs cleanup completed successfully")
+}
+
+// StartCleanupScheduler runs cleanup jobs periodically
 func StartCleanupScheduler() {
-	ticker := time.NewTicker(24 * time.Hour) // Run daily
+	// Run analytics cleanup daily at 2 AM
+	analyticsTicker := time.NewTicker(24 * time.Hour)
 	go func() {
-		for range ticker.C {
+		// Run once immediately at startup
+		CleanupOldAnalytics()
+
+		for range analyticsTicker.C {
 			CleanupOldAnalytics()
 		}
 	}()
-	
-	log.Println("[Cleanup] Scheduler started - will run daily")
+
+	// Run URL expiry cleanup every hour
+	expiryTicker := time.NewTicker(1 * time.Hour)
+	go func() {
+		// Run once immediately at startup
+		CleanupExpiredURLs()
+
+		for range expiryTicker.C {
+			CleanupExpiredURLs()
+		}
+	}()
+
+	log.Println("[Cleanup] Scheduler started - Analytics cleanup: daily, URL expiry cleanup: hourly")
 }
 
 
