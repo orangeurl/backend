@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	UnlockSessionTTL     = 5 * time.Second   // Very short session - require password each visit
+	UnlockSessionTTL     = 30 * time.Minute  // Session lasts 30 minutes after successful unlock
 	MaxPasswordAttempts  = 5                 // Max attempts before rate limit
 	RateLimitWindow      = 15 * time.Minute  // Rate limit window
 	TemporaryLockAttempts = 10               // Lock after this many attempts

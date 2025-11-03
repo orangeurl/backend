@@ -42,8 +42,8 @@ type ClerkWebhookEvent struct {
 
 func HandleClerkWebhook(c *fiber.Ctx) error {
 	log.Printf("=== WEBHOOK CALLED ===")
-	log.Printf("Headers: %v", c.GetReqHeaders())
-	log.Printf("Body: %s", string(c.Body()))
+	// DO NOT log full headers or body in production - may contain sensitive data
+	log.Printf("Request received from IP: %s", c.IP())
 	log.Printf("=======================")
 
 	// Parse the webhook event first

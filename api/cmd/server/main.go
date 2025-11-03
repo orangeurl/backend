@@ -38,9 +38,9 @@ func setupRoutes(app *fiber.App) {
 	// URL shortening with optional auth (saves to user account if authenticated)
 	app.Post("/api/v1", middleware.OptionalAuth(), urlService.ShortenURL)
 
-	// Webhook routes (public - no auth required)
-	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)
-	app.Post("/api/webhooks/dodo", payment.HandleDodoWebhook)
+	// Webhook routes (public - no auth required, but rate limited)
+	app.Post("/api/webhooks/clerk", middleware.WebhookRateLimit(), auth.HandleClerkWebhook)
+	app.Post("/api/webhooks/dodo", middleware.WebhookRateLimit(), payment.HandleDodoWebhook)
 
 	// Waitlist route (public - no auth required)
 	app.Post("/api/v1/api/waitlist", waitlist.JoinWaitlist)
@@ -66,8 +66,8 @@ func setupRoutes(app *fiber.App) {
 	api.Delete("/urls/:id/lock", middleware.RequireAuth(), urls.RemoveURLPassword)
 	api.Get("/urls/:shortId/password-stats", middleware.RequireAuth(), urls.GetPasswordStats)
 
-	// Public unlock endpoint (no auth required)
-	app.Post("/api/unlock/:shortId", urls.UnlockURL)
+	// Public unlock endpoint (no auth required, but rate limited to prevent brute force)
+	app.Post("/api/unlock/:shortId", middleware.AuthRateLimit(), urls.UnlockURL)
 }
 
 func main() {

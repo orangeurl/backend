@@ -66,8 +66,8 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 	}
 
 	log.Printf("[DodoWebhook] ========== NEW WEBHOOK RECEIVED ==========")
-	log.Printf("[DodoWebhook] Headers: %v", c.GetReqHeaders())
-	log.Printf("[DodoWebhook] Signature: %s", signature)
+	log.Printf("[DodoWebhook] Request from IP: %s", c.IP())
+	// DO NOT log signature or full headers in production - sensitive data
 
 	secret := os.Getenv("DODO_WEBHOOK_SECRET")
 	if secret == "" {
@@ -85,7 +85,7 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 		log.Printf("[DodoWebhook] ⚠️  No signature provided, skipping verification for testing")
 	}
 
-	log.Printf("[DodoWebhook] Payload: %s", string(raw))
+	// DO NOT log raw payload in production - contains customer data
 
 	var evt DodoEvent
 	if err := json.Unmarshal(raw, &evt); err != nil {
