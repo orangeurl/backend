@@ -121,21 +121,32 @@ func APIRateLimit() fiber.Handler {
 		}
 
 		// Determine rate limit based on subscription tier
+		// Free tier: No API access
+		// Pro tier: 5,000 requests/hour (120,000/month)
+		// Premium tier: 20,000 requests/hour (480,000/month)
 		var limit int64
 		var window time.Duration
 		switch user.SubscriptionTier {
 		case "free":
-			limit = 100
-			window = 1 * time.Hour
+			// Free tier does not have API access
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "API access not available",
+				"message": "API access is only available for Pro and Premium subscribers. Please upgrade your plan.",
+				"upgrade_url": "https://orangeurl.live/pricing",
+			})
 		case "pro":
-			limit = 1000
+			limit = 5000
 			window = 1 * time.Hour
 		case "premium":
-			limit = 10000
+			limit = 20000
 			window = 1 * time.Hour
 		default:
-			limit = 100
-			window = 1 * time.Hour
+			// Default to no access for unknown tiers
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "API access not available",
+				"message": "API access is only available for Pro and Premium subscribers. Please upgrade your plan.",
+				"upgrade_url": "https://orangeurl.live/pricing",
+			})
 		}
 
 		key := fmt.Sprintf("api_ratelimit:%s:%d", user.ID, time.Now().Unix()/int64(window.Seconds()))

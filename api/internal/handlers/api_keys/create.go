@@ -77,16 +77,26 @@ func CreateAPIKey(c *fiber.Ctx) error {
 	}
 
 	// Set limits based on subscription tier
+	// Pro: Up to 5 API keys (Basic API Access)
+	// Premium: Unlimited API keys (Advanced API Access)
 	var maxKeys int64
 	switch user.SubscriptionTier {
 	case "free":
-		maxKeys = 1
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":       "API keys not available",
+			"message":     "API keys are only available for Pro and Premium subscribers.",
+			"upgrade_url": "https://orangeurl.live/pricing",
+		})
 	case "pro":
 		maxKeys = 5
 	case "premium":
-		maxKeys = 20
+		maxKeys = 999999 // Effectively unlimited
 	default:
-		maxKeys = 1
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":       "API keys not available",
+			"message":     "API keys are only available for Pro and Premium subscribers.",
+			"upgrade_url": "https://orangeurl.live/pricing",
+		})
 	}
 
 	if count >= maxKeys {
