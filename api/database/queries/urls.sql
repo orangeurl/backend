@@ -55,3 +55,10 @@ SELECT COUNT(*) FROM urls
 WHERE user_id = $1
     AND is_active = TRUE
     AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE);
+
+-- name: GetUserURLByOriginalURL :one
+SELECT * FROM urls
+WHERE user_id = $1
+    AND original_url = $2
+    AND is_active = TRUE
+LIMIT 1;

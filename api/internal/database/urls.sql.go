@@ -132,6 +132,39 @@ func (q *Queries) GetURLByShortID(ctx context.Context, shortID string) (Url, err
 	return i, err
 }
 
+const getUserURLByOriginalURL = `-- name: GetUserURLByOriginalURL :one
+SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt FROM urls
+WHERE user_id = $1
+    AND original_url = $2
+    AND is_active = TRUE
+LIMIT 1
+`
+
+type GetUserURLByOriginalURLParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OriginalUrl string    `json:"original_url"`
+}
+
+func (q *Queries) GetUserURLByOriginalURL(ctx context.Context, arg GetUserURLByOriginalURLParams) (Url, error) {
+	row := q.db.QueryRowContext(ctx, getUserURLByOriginalURL, arg.UserID, arg.OriginalUrl)
+	var i Url
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ShortID,
+		&i.OriginalUrl,
+		&i.Expiry,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PasswordHash,
+		&i.IsLocked,
+		&i.PasswordAttempts,
+		&i.LastPasswordAttempt,
+	)
+	return i, err
+}
+
 const getUserURLCount = `-- name: GetUserURLCount :one
 SELECT COUNT(*) FROM urls WHERE user_id = $1 AND is_active = TRUE
 `
