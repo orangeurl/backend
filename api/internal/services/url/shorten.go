@@ -16,6 +16,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/database"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/url"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
+	"github.com/xenonnn4w/orangeurl/internal/services/ai"
 )
 
 const (
@@ -83,6 +84,7 @@ type request struct {
 	Expiry       time.Duration `json:"expiry"`
 	CustomExpiry *time.Time    `json:"custom_expiry"` // Premium feature - specific expiry date
 	Password     string        `json:"password"`      // Premium feature - password protection
+	UseAI        bool          `json:"use_ai"`        // Premium feature - AI-powered URL generation
 }
 
 type response struct {
@@ -157,8 +159,54 @@ func ShortenURL(c *fiber.Ctx) error {
 	var id string
 
 	if body.CustomShort == "" {
-		// Generate random short ID using full alphanumeric character set (a-z, A-Z, 0-9)
-		id = generateShortID(shortURLLength)
+		// Check if AI generation is requested
+		if body.UseAI {
+			// AI-powered generation (Premium feature)
+			log.Printf("[ShortenURL] AI generation requested for URL: %s", body.URL)
+
+			// Check if user is authenticated and Premium tier
+			user, userErr := middleware.GetUserFromContext(c)
+			canUseAI := false
+
+			if userErr == nil {
+				queries := database.GetQueries()
+				if queries != nil {
+					userDetails, err := queries.GetUserByID(c.Context(), user.ID)
+					if err == nil {
+						// Check user tier - only Premium users can use AI
+						tier := userDetails.SubscriptionTier
+						if tier == "premium" {
+							canUseAI = true
+						}
+					}
+				}
+			}
+
+			if canUseAI {
+				// Use Gemini Pro for intelligent generation
+				aiID, err := ai.GenerateSmartShortID(body.URL, true)
+				if err != nil {
+					log.Printf("[ShortenURL] AI generation failed: %v, falling back to random", err)
+					id = generateShortID(shortURLLength)
+				} else {
+					id = aiID
+					log.Printf("[ShortenURL] AI generated ID: %s", id)
+				}
+			} else {
+				// Free/Pro users: use local smart generation (no AI)
+				log.Printf("[ShortenURL] Using local smart generation (user not Premium)")
+				smartID, err := ai.GenerateSmartShortID(body.URL, false)
+				if err != nil {
+					log.Printf("[ShortenURL] Smart generation failed: %v, using random", err)
+					id = generateShortID(shortURLLength)
+				} else {
+					id = smartID
+				}
+			}
+		} else {
+			// Random generation (default)
+			id = generateShortID(shortURLLength)
+		}
 	} else {
 		// Validate custom short URL for security
 		if !isValidCustomShortURL(body.CustomShort) {
