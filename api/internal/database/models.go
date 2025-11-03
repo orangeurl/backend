@@ -7,6 +7,7 @@ package database
 import (
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -113,6 +114,21 @@ type Subscription struct {
 	Currency                   sql.NullString `json:"currency"`
 }
 
+type Team struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	OwnerID   uuid.UUID `json:"owner_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type TeamMember struct {
+	ID       uuid.UUID `json:"id"`
+	TeamID   uuid.UUID `json:"team_id"`
+	UserID   uuid.UUID `json:"user_id"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
 type Url struct {
 	ID                  uuid.UUID      `json:"id"`
 	UserID              uuid.UUID      `json:"user_id"`
@@ -126,6 +142,7 @@ type Url struct {
 	IsLocked            sql.NullBool   `json:"is_locked"`
 	PasswordAttempts    sql.NullInt32  `json:"password_attempts"`
 	LastPasswordAttempt sql.NullTime   `json:"last_password_attempt"`
+	TeamID              uuid.NullUUID  `json:"team_id"`
 }
 
 type UrlClick struct {

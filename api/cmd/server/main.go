@@ -17,6 +17,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/dashboard"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/docs"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/payment"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/teams"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/webhooks"
@@ -109,6 +110,13 @@ func setupRoutes(app *fiber.App) {
 	api.Put("/webhooks/:id", middleware.RequireAuth(), webhooks.UpdateWebhook)
 	api.Delete("/webhooks/:id", middleware.RequireAuth(), webhooks.DeleteWebhook)
 	api.Put("/webhooks/:id/toggle", middleware.RequireAuth(), webhooks.ToggleWebhook)
+
+	// Team Management (requires JWT auth - Premium only)
+	api.Post("/teams", middleware.RequireAuth(), teams.CreateTeam)
+	api.Get("/teams/my-team", middleware.RequireAuth(), teams.GetMyTeam)
+	api.Post("/teams/members", middleware.RequireAuth(), teams.AddTeamMemberHandler)
+	api.Delete("/teams/members/:memberID", middleware.RequireAuth(), teams.RemoveTeamMemberHandler)
+	api.Delete("/teams", middleware.RequireAuth(), teams.DeleteTeam)
 
 	// Public API (v1) - Requires API Key + Rate Limiting
 	apiV1 := app.Group("/api/v1", middleware.RequireAPIKey(), middleware.APIRateLimit())
