@@ -311,13 +311,18 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 
 	queries := database.GetQueries()
 
-	// Get URL and verify ownership
+	// Get URL and verify ownership or team access
 	url, err := queries.GetURLByShortID(c.Context(), shortID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
 	}
 
-	if url.UserID != user.ID {
+	// Check if user can access this URL (owner or team member)
+	canAccess, err := queries.CanUserAccessURL(c.Context(), database.CanUserAccessURLParams{
+		ID:     url.ID,
+		UserID: user.ID,
+	})
+	if err != nil || !canAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
 	}
 
