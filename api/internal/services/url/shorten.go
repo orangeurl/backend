@@ -18,6 +18,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/url"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 	"github.com/xenonnn4w/orangeurl/internal/services/ai"
+	webhookService "github.com/xenonnn4w/orangeurl/internal/services/webhooks"
 )
 
 const (
@@ -444,6 +445,26 @@ func ShortenURL(c *fiber.Ctx) error {
 			UserID: user.ID,
 			Month:  currentMonth,
 		})
+
+		// Trigger webhook for url.created event
+		host := os.Getenv("DOMAIN")
+		if host == "" {
+			host = os.Getenv("PUBLIC_HOST")
+		}
+		if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+			host = "https://" + host
+		}
+		shortURL := host + "/" + id
+
+		webhookService.TriggerWebhook("url.created", map[string]interface{}{
+			"short_url":  shortURL,
+			"short_id":   id,
+			"long_url":   body.URL,
+			"user_id":    user.ID.String(),
+			"is_locked":  createdURL.IsLocked.Valid && createdURL.IsLocked.Bool,
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+		})
+		log.Printf("[ShortenURL] Webhook triggered for url.created: %s", shortURL)
 	}
 	// If user is not authenticated, URL only stored in Redis (existing behavior for anonymous users)
 

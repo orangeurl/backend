@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -31,7 +32,7 @@ func TriggerWebhook(eventType string, data map[string]interface{}) {
 		queries := database.GetQueries()
 
 		// Get all active webhooks subscribed to this event
-		webhooks, err := queries.ListActiveWebhooksByEvent(ctx, eventType)
+		webhooks, err := queries.ListActiveWebhooksByEvent(ctx, []string{eventType})
 		if err != nil {
 			log.Printf("[Webhook] Failed to fetch webhooks for event %s: %v", eventType, err)
 			return
@@ -142,7 +143,7 @@ func deliverWebhook(webhook database.Webhook, deliveryID uuid.UUID, payload []by
 			if err := queries.UpdateWebhookDelivery(ctx, database.UpdateWebhookDeliveryParams{
 				ID:           deliveryID,
 				Status:       "success",
-				Attempts:     int32(attempt + 1),
+				Attempts:     sql.NullInt32{Int32: int32(attempt + 1), Valid: true},
 				ResponseCode: database.NewNullInt32(int32(responseCode)),
 				ResponseBody: database.NewNullString(truncateString(responseBody, 500)),
 			}); err != nil {
@@ -161,7 +162,7 @@ func deliverWebhook(webhook database.Webhook, deliveryID uuid.UUID, payload []by
 	if err := queries.UpdateWebhookDelivery(ctx, database.UpdateWebhookDeliveryParams{
 		ID:           deliveryID,
 		Status:       "failed",
-		Attempts:     int32(maxAttempts),
+		Attempts:     sql.NullInt32{Int32: int32(maxAttempts), Valid: true},
 		ResponseCode: database.NewNullInt32(int32(responseCode)),
 		ResponseBody: database.NewNullString(truncateString(responseBody, 500)),
 	}); err != nil {

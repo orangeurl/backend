@@ -7,12 +7,14 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/sqlc-dev/pqtype"
 	"github.com/xenonnn4w/orangeurl/internal/database"
+	webhookService "github.com/xenonnn4w/orangeurl/internal/services/webhooks"
 )
 
 var (
@@ -246,7 +248,7 @@ func ResolveURL(c *fiber.Ctx) error {
 		// Parse user agent data
 		deviceType := parseDeviceType(userAgent)
 		browser := parseBrowser(userAgent)
-		os := parseOS(userAgent)
+		osName := parseOS(userAgent)
 		botDetected := isBot(userAgent)
 
 		// Try to get country from common headers set by CDNs/proxies
@@ -280,9 +282,39 @@ func ResolveURL(c *fiber.Ctx) error {
 			City:       sql.NullString{String: city, Valid: city != ""},
 			DeviceType: sql.NullString{String: deviceType, Valid: true},
 			Browser:    sql.NullString{String: browser, Valid: true},
-			Os:         sql.NullString{String: os, Valid: true},
+			Os:         sql.NullString{String: osName, Valid: true},
 			IsBot:      sql.NullBool{Bool: botDetected, Valid: true},
 		})
+
+		// Trigger webhook for url.clicked event
+		host := os.Getenv("DOMAIN")
+		if host == "" {
+			host = os.Getenv("PUBLIC_HOST")
+		}
+		if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+			host = "https://" + host
+		}
+		shortURL := host + "/" + url
+
+		referrerSource := parseReferrerSource(referer)
+
+		webhookService.TriggerWebhook("url.clicked", map[string]interface{}{
+			"short_url":      shortURL,
+			"short_id":       url,
+			"long_url":       value,
+			"clicked_at":     time.Now().UTC().Format(time.RFC3339),
+			"ip":             ipAddress,
+			"user_agent":     userAgent,
+			"referer":        referer,
+			"referer_source": referrerSource,
+			"country":        country,
+			"city":           city,
+			"device_type":    deviceType,
+			"browser":        browser,
+			"os":             osName,
+			"is_bot":         botDetected,
+		})
+		log.Printf("[ResolveURL] Webhook triggered for url.clicked: %s", shortURL)
 	}
 
 	return c.Redirect(value, 301)
