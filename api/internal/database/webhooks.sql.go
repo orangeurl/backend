@@ -225,7 +225,7 @@ func (q *Queries) GetWebhookDeliveryStats(ctx context.Context, webhookID uuid.UU
 
 const listActiveWebhooksByEvent = `-- name: ListActiveWebhooksByEvent :many
 SELECT id, user_id, url, events, secret, is_active, created_at, updated_at FROM webhooks
-WHERE is_active = TRUE AND $1 = ANY(events)
+WHERE is_active = TRUE AND events && $1
 `
 
 func (q *Queries) ListActiveWebhooksByEvent(ctx context.Context, events []string) ([]Webhook, error) {

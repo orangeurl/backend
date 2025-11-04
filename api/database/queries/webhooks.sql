@@ -21,7 +21,7 @@ ORDER BY created_at DESC;
 
 -- name: ListActiveWebhooksByEvent :many
 SELECT * FROM webhooks
-WHERE is_active = TRUE AND $1 = ANY(events);
+WHERE is_active = TRUE AND events && $1;
 
 -- name: UpdateWebhook :one
 UPDATE webhooks
