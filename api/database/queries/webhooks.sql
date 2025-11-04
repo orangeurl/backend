@@ -23,6 +23,10 @@ ORDER BY created_at DESC;
 SELECT * FROM webhooks
 WHERE is_active = TRUE AND events && $1;
 
+-- name: ListActiveWebhooksByEventAndUser :many
+SELECT * FROM webhooks
+WHERE is_active = TRUE AND events && $1 AND user_id = $2;
+
 -- name: UpdateWebhook :one
 UPDATE webhooks
 SET url = $2, events = $3, updated_at = NOW()

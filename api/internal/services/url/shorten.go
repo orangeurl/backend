@@ -456,7 +456,7 @@ func ShortenURL(c *fiber.Ctx) error {
 		}
 		shortURL := host + "/" + id
 
-		webhookService.TriggerWebhook("url.created", map[string]interface{}{
+		webhookService.TriggerWebhook("url.created", user.ID, map[string]interface{}{
 			"short_url":  shortURL,
 			"short_id":   id,
 			"long_url":   body.URL,

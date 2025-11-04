@@ -260,6 +260,48 @@ func (q *Queries) ListActiveWebhooksByEvent(ctx context.Context, events []string
 	return items, nil
 }
 
+const listActiveWebhooksByEventAndUser = `-- name: ListActiveWebhooksByEventAndUser :many
+SELECT id, user_id, url, events, secret, is_active, created_at, updated_at FROM webhooks
+WHERE is_active = TRUE AND events && $1 AND user_id = $2
+`
+
+type ListActiveWebhooksByEventAndUserParams struct {
+	Events []string  `json:"events"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ListActiveWebhooksByEventAndUser(ctx context.Context, arg ListActiveWebhooksByEventAndUserParams) ([]Webhook, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveWebhooksByEventAndUser, pq.Array(arg.Events), arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Webhook
+	for rows.Next() {
+		var i Webhook
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Url,
+			pq.Array(&i.Events),
+			&i.Secret,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserWebhooks = `-- name: ListUserWebhooks :many
 SELECT id, user_id, url, events, secret, is_active, created_at, updated_at FROM webhooks
 WHERE user_id = $1

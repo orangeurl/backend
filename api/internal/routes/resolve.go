@@ -320,7 +320,7 @@ func ResolveURL(c *fiber.Ctx) error {
 
 		referrerSource := parseReferrerSource(referer)
 
-		webhookService.TriggerWebhook("url.clicked", map[string]interface{}{
+		webhookService.TriggerWebhook("url.clicked", urlRecord.UserID, map[string]interface{}{
 			"short_url":      shortURL,
 			"short_id":       url,
 			"long_url":       value,

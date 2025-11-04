@@ -25,25 +25,28 @@ type WebhookEvent struct {
 	Data      map[string]interface{} `json:"data"`
 }
 
-// TriggerWebhook sends webhook events to all subscribed endpoints
-func TriggerWebhook(eventType string, data map[string]interface{}) {
+// TriggerWebhook sends webhook events to subscribed endpoints for a specific user
+func TriggerWebhook(eventType string, userID uuid.UUID, data map[string]interface{}) {
 	go func() {
 		ctx := context.Background()
 		queries := database.GetQueries()
 
-		// Get all active webhooks subscribed to this event
-		webhooks, err := queries.ListActiveWebhooksByEvent(ctx, []string{eventType})
+		// Get all active webhooks subscribed to this event for the specific user
+		webhooks, err := queries.ListActiveWebhooksByEventAndUser(ctx, database.ListActiveWebhooksByEventAndUserParams{
+			Events: []string{eventType},
+			UserID: userID,
+		})
 		if err != nil {
-			log.Printf("[Webhook] Failed to fetch webhooks for event %s: %v", eventType, err)
+			log.Printf("[Webhook] Failed to fetch webhooks for event %s and user %s: %v", eventType, userID, err)
 			return
 		}
 
 		if len(webhooks) == 0 {
-			log.Printf("[Webhook] No active webhooks for event: %s", eventType)
+			log.Printf("[Webhook] No active webhooks for event %s and user %s", eventType, userID)
 			return
 		}
 
-		log.Printf("[Webhook] Triggering %d webhooks for event: %s", len(webhooks), eventType)
+		log.Printf("[Webhook] Triggering %d webhooks for event %s and user %s", len(webhooks), eventType, userID)
 
 		// Create webhook event payload
 		event := WebhookEvent{
