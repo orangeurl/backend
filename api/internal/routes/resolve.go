@@ -41,33 +41,46 @@ func initGeoIP() {
 	})
 }
 
-// getCityFromIP looks up city information from IP address using GeoIP2
-func getCityFromIP(ipAddress string) string {
+// GeoData holds geographic information from IP lookup
+type GeoData struct {
+	Country string
+	City    string
+}
+
+// getGeoFromIP looks up geographic information from IP address using GeoIP2
+func getGeoFromIP(ipAddress string) GeoData {
+	result := GeoData{}
+
 	// Initialize GeoIP reader if not already done
 	initGeoIP()
 
 	if geoIPReader == nil {
-		return "" // GeoIP database not available
+		return result // GeoIP database not available
 	}
 
 	ip := net.ParseIP(ipAddress)
 	if ip == nil {
-		return ""
+		return result
 	}
 
 	record, err := geoIPReader.City(ip)
 	if err != nil {
-		return ""
+		return result
 	}
 
-	// Return city name in English
+	// Extract country code (ISO format like "US", "GB", "CA")
+	if record.Country.IsoCode != "" {
+		result.Country = record.Country.IsoCode
+	}
+
+	// Extract city name in English
 	if record.City.Names != nil {
 		if cityName, ok := record.City.Names["en"]; ok {
-			return cityName
+			result.City = cityName
 		}
 	}
 
-	return ""
+	return result
 }
 
 // Simple user-agent parser helpers
@@ -253,9 +266,18 @@ func ResolveURL(c *fiber.Ctx) error {
 
 		// Try to get country from common headers set by CDNs/proxies
 		country := extractCountryFromHeaders(c)
+		city := ""
 
-		// Try to get city from GeoIP lookup
-		city := getCityFromIP(ipAddress)
+		// If no country from headers, or to get city, use GeoIP lookup
+		if country == "" {
+			geoData := getGeoFromIP(ipAddress)
+			country = geoData.Country
+			city = geoData.City
+		} else {
+			// We have country from headers, but still want city from GeoIP
+			geoData := getGeoFromIP(ipAddress)
+			city = geoData.City
+		}
 
 		// Create click record
 		// Parse IP address using net package
