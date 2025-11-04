@@ -80,6 +80,8 @@ func setupRoutes(app *fiber.App) {
 	// Dashboard routes (with auth)
 	api.Get("/dashboard/stats", middleware.RequireAuth(), dashboard.GetDashboardStats)
 	api.Get("/dashboard/urls/:shortId/analytics", middleware.RequireAuth(), dashboard.GetURLAnalytics)
+	api.Get("/dashboard/urls/personal", middleware.RequireAuth(), dashboard.GetPersonalURLs)
+	api.Get("/dashboard/urls/team", middleware.RequireAuth(), dashboard.GetTeamURLs)
 
 	// Analytics routes (with auth)
 	api.Get("/analytics", middleware.RequireAuth(), analytics.GetUserAnalytics)
@@ -117,6 +119,10 @@ func setupRoutes(app *fiber.App) {
 	api.Post("/teams/members", middleware.RequireAuth(), teams.AddTeamMemberHandler)
 	api.Delete("/teams/members/:memberID", middleware.RequireAuth(), teams.RemoveTeamMemberHandler)
 	api.Delete("/teams", middleware.RequireAuth(), teams.DeleteTeam)
+
+	// Team URL Management (requires JWT auth - Premium only, owner only)
+	api.Post("/teams/urls/:urlID/assign", middleware.RequireAuth(), teams.AssignURLToTeam)
+	api.Delete("/teams/urls/:urlID/unassign", middleware.RequireAuth(), teams.UnassignURLFromTeam)
 
 	// Public API (v1) - Requires API Key + Rate Limiting
 	apiV1 := app.Group("/api/v1", middleware.RequireAPIKey(), middleware.APIRateLimit())

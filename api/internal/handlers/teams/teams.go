@@ -316,3 +316,130 @@ func DeleteTeam(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"message": "Team deleted successfully"})
 }
+
+// AssignURLToTeam assigns a URL to the team (owner only)
+func AssignURLToTeam(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	queries := database.GetQueries()
+
+	// Get user's team (must be owner)
+	team, err := queries.GetTeamByOwnerID(c.Context(), user.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "You don't have a team or you're not the owner"})
+		}
+		log.Printf("[AssignURLToTeam] Error fetching team: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch team"})
+	}
+
+	// Get URL ID from params
+	urlIDStr := c.Params("urlID")
+	if urlIDStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "URL ID is required"})
+	}
+
+	// Parse UUID
+	urlID, err := uuid.Parse(urlIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid URL ID"})
+	}
+
+	// Verify URL belongs to the user
+	url, err := queries.GetURL(c.Context(), urlID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
+		}
+		log.Printf("[AssignURLToTeam] Error fetching URL: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch URL"})
+	}
+
+	// Only the URL owner can assign it to their team
+	if url.UserID != user.ID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "You can only share your own URLs"})
+	}
+
+	// Assign URL to team
+	err = queries.AssignURLToTeam(c.Context(), database.AssignURLToTeamParams{
+		TeamID: uuid.NullUUID{UUID: team.ID, Valid: true},
+		ID:     urlID,
+	})
+	if err != nil {
+		log.Printf("[AssignURLToTeam] Error assigning URL: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to assign URL to team"})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "URL shared with team successfully",
+		"url_id":  urlID,
+		"team_id": team.ID,
+	})
+}
+
+// UnassignURLFromTeam removes a URL from the team (owner only)
+func UnassignURLFromTeam(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	queries := database.GetQueries()
+
+	// Get user's team (must be owner)
+	team, err := queries.GetTeamByOwnerID(c.Context(), user.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "You don't have a team or you're not the owner"})
+		}
+		log.Printf("[UnassignURLFromTeam] Error fetching team: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch team"})
+	}
+
+	// Get URL ID from params
+	urlIDStr := c.Params("urlID")
+	if urlIDStr == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "URL ID is required"})
+	}
+
+	// Parse UUID
+	urlID, err := uuid.Parse(urlIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid URL ID"})
+	}
+
+	// Verify URL belongs to the user
+	url, err := queries.GetURL(c.Context(), urlID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
+		}
+		log.Printf("[UnassignURLFromTeam] Error fetching URL: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch URL"})
+	}
+
+	// Only the URL owner can unassign it
+	if url.UserID != user.ID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "You can only unshare your own URLs"})
+	}
+
+	// Verify URL is assigned to user's team
+	if !url.TeamID.Valid || url.TeamID.UUID != team.ID {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "URL is not assigned to your team"})
+	}
+
+	// Unassign URL from team
+	err = queries.UnassignURLFromTeam(c.Context(), urlID)
+	if err != nil {
+		log.Printf("[UnassignURLFromTeam] Error unassigning URL: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to unassign URL from team"})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "URL removed from team successfully",
+		"url_id":  urlID,
+	})
+}

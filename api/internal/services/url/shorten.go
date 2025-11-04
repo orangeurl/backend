@@ -86,7 +86,6 @@ type request struct {
 	CustomExpiry *time.Time    `json:"custom_expiry"` // Premium feature - specific expiry date
 	Password     string        `json:"password"`      // Premium feature - password protection
 	UseAI        bool          `json:"use_ai"`        // Premium feature - AI-powered URL generation
-	ShareWithTeam bool         `json:"share_with_team"` // Premium feature - share URL with team
 }
 
 type response struct {
@@ -413,25 +412,9 @@ func ShortenURL(c *fiber.Ctx) error {
 			}
 		}
 
-		// Handle team assignment (Premium feature)
-		var teamID uuid.NullUUID
-
-		if body.ShareWithTeam {
-			// Check if user has a team (either as owner or member)
-			team, teamErr := queries.GetTeamByOwnerID(c.Context(), user.ID)
-			if teamErr != nil {
-				// Not owner, check if member of a team
-				team, teamErr = queries.GetTeamByMemberUserID(c.Context(), user.ID)
-			}
-
-			if teamErr == nil {
-				// User has a team, assign URL to it
-				teamID = uuid.NullUUID{UUID: team.ID, Valid: true}
-				log.Printf("[ShortenURL] Assigning URL %s to team %s for user %s", id, team.ID, user.ID)
-			} else {
-				log.Printf("[ShortenURL] User %s requested team sharing but is not in a team", user.ID)
-			}
-		}
+		// URLs are created as personal URLs by default
+		// Team assignment happens from dashboard, not during creation
+		teamID := uuid.NullUUID{Valid: false}
 
 		createdURL, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
 			UserID:       user.ID,

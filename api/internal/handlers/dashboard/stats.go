@@ -125,14 +125,14 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		log.Printf("[Dashboard] No subscription found (error: %v) - using user.subscription_tier: %s", subErr, planTier)
 	}
 
-	// Get URL count (including team URLs)
-	log.Println("[Dashboard] Fetching URL count...")
-	urlCount, err := queries.GetUserAndTeamURLCount(c.Context(), user.ID)
+	// Get personal URL count (excluding team URLs - for limits)
+	log.Println("[Dashboard] Fetching personal URL count...")
+	urlCount, err := queries.GetUserURLCount(c.Context(), user.ID)
 	if err != nil {
-		log.Printf("[Dashboard] Error getting URL count: %v", err)
+		log.Printf("[Dashboard] Error getting personal URL count: %v", err)
 		urlCount = 0
 	} else {
-		log.Printf("[Dashboard] URL count (including team URLs): %d", urlCount)
+		log.Printf("[Dashboard] Personal URL count: %d", urlCount)
 	}
 
 	// Get click stats
@@ -587,5 +587,87 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// GetPersonalURLs returns only personal URLs (not shared with team)
+func GetPersonalURLs(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	queries := database.GetQueries()
+	urls, err := queries.GetUserPersonalURLs(c.Context(), user.ID)
+	if err != nil {
+		log.Printf("[GetPersonalURLs] Error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch URLs"})
+	}
+
+	// Format URLs with click stats
+	urlsWithStats := make([]URLWithStats, 0)
+	for _, url := range urls {
+		clicks, _ := queries.GetURLAnalytics(c.Context(), url.ID)
+
+		createdAt := time.Now()
+		if url.CreatedAt.Valid {
+			createdAt = url.CreatedAt.Time
+		}
+
+		urlsWithStats = append(urlsWithStats, URLWithStats{
+			ID:          url.ID.String(),
+			ShortID:     url.ShortID,
+			OriginalURL: url.OriginalUrl,
+			Clicks:      int64(len(clicks)),
+			CreatedAt:   createdAt,
+			IsActive:    url.IsActive.Bool,
+			IsLocked:    url.IsLocked.Valid && url.IsLocked.Bool,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"urls": urlsWithStats,
+		"count": len(urlsWithStats),
+	})
+}
+
+// GetTeamURLs returns only URLs shared with user's team
+func GetTeamURLs(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	queries := database.GetQueries()
+	urls, err := queries.GetUserTeamURLs(c.Context(), user.ID)
+	if err != nil {
+		log.Printf("[GetTeamURLs] Error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch team URLs"})
+	}
+
+	// Format URLs with click stats
+	urlsWithStats := make([]URLWithStats, 0)
+	for _, url := range urls {
+		clicks, _ := queries.GetURLAnalytics(c.Context(), url.ID)
+
+		createdAt := time.Now()
+		if url.CreatedAt.Valid {
+			createdAt = url.CreatedAt.Time
+		}
+
+		urlsWithStats = append(urlsWithStats, URLWithStats{
+			ID:          url.ID.String(),
+			ShortID:     url.ShortID,
+			OriginalURL: url.OriginalUrl,
+			Clicks:      int64(len(clicks)),
+			CreatedAt:   createdAt,
+			IsActive:    url.IsActive.Bool,
+			IsLocked:    url.IsLocked.Valid && url.IsLocked.Bool,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"urls": urlsWithStats,
+		"count": len(urlsWithStats),
+	})
 }
 

@@ -90,6 +90,7 @@ const getMonthlyURLCount = `-- name: GetMonthlyURLCount :one
 SELECT COUNT(*) FROM urls
 WHERE user_id = $1
     AND is_active = TRUE
+    AND team_id IS NULL
     AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
 `
 
@@ -209,6 +210,95 @@ func (q *Queries) GetUserAndTeamURLs(ctx context.Context, userID uuid.UUID) ([]U
 	return items, nil
 }
 
+const getUserPersonalURLs = `-- name: GetUserPersonalURLs :many
+SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt, team_id FROM urls
+WHERE user_id = $1 AND is_active = TRUE AND team_id IS NULL
+ORDER BY created_at DESC
+`
+
+// Get ONLY URLs owned by user (NOT shared with team)
+func (q *Queries) GetUserPersonalURLs(ctx context.Context, userID uuid.UUID) ([]Url, error) {
+	rows, err := q.db.QueryContext(ctx, getUserPersonalURLs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Url
+	for rows.Next() {
+		var i Url
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ShortID,
+			&i.OriginalUrl,
+			&i.Expiry,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PasswordHash,
+			&i.IsLocked,
+			&i.PasswordAttempts,
+			&i.LastPasswordAttempt,
+			&i.TeamID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserTeamURLs = `-- name: GetUserTeamURLs :many
+SELECT DISTINCT u.id, u.user_id, u.short_id, u.original_url, u.expiry, u.is_active, u.created_at, u.updated_at, u.password_hash, u.is_locked, u.password_attempts, u.last_password_attempt, u.team_id FROM urls u
+INNER JOIN team_members tm ON u.team_id = tm.team_id
+WHERE tm.user_id = $1 AND u.is_active = TRUE
+ORDER BY u.created_at DESC
+`
+
+// Get ONLY URLs shared with user's team
+func (q *Queries) GetUserTeamURLs(ctx context.Context, userID uuid.UUID) ([]Url, error) {
+	rows, err := q.db.QueryContext(ctx, getUserTeamURLs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Url
+	for rows.Next() {
+		var i Url
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ShortID,
+			&i.OriginalUrl,
+			&i.Expiry,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PasswordHash,
+			&i.IsLocked,
+			&i.PasswordAttempts,
+			&i.LastPasswordAttempt,
+			&i.TeamID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserURLByOriginalURL = `-- name: GetUserURLByOriginalURL :one
 SELECT id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt, team_id FROM urls
 WHERE user_id = $1
@@ -244,7 +334,7 @@ func (q *Queries) GetUserURLByOriginalURL(ctx context.Context, arg GetUserURLByO
 }
 
 const getUserURLCount = `-- name: GetUserURLCount :one
-SELECT COUNT(*) FROM urls WHERE user_id = $1 AND is_active = TRUE
+SELECT COUNT(*) FROM urls WHERE user_id = $1 AND is_active = TRUE AND team_id IS NULL
 `
 
 func (q *Queries) GetUserURLCount(ctx context.Context, userID uuid.UUID) (int64, error) {

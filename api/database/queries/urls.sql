@@ -14,7 +14,7 @@ SELECT * FROM urls WHERE user_id = $1 AND is_active = TRUE
 ORDER BY created_at DESC;
 
 -- name: GetUserURLCount :one
-SELECT COUNT(*) FROM urls WHERE user_id = $1 AND is_active = TRUE;
+SELECT COUNT(*) FROM urls WHERE user_id = $1 AND is_active = TRUE AND team_id IS NULL;
 
 -- name: UpdateURL :one
 UPDATE urls 
@@ -54,6 +54,7 @@ WHERE short_id = $1;
 SELECT COUNT(*) FROM urls
 WHERE user_id = $1
     AND is_active = TRUE
+    AND team_id IS NULL
     AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE);
 
 -- name: GetUserURLByOriginalURL :one
@@ -82,3 +83,16 @@ ORDER BY u.created_at DESC;
 SELECT COUNT(DISTINCT u.id) FROM urls u
 LEFT JOIN team_members tm ON u.team_id = tm.team_id
 WHERE (u.user_id = $1 OR tm.user_id = $1) AND u.is_active = TRUE;
+
+-- name: GetUserPersonalURLs :many
+-- Get ONLY URLs owned by user (NOT shared with team)
+SELECT * FROM urls
+WHERE user_id = $1 AND is_active = TRUE AND team_id IS NULL
+ORDER BY created_at DESC;
+
+-- name: GetUserTeamURLs :many
+-- Get ONLY URLs shared with user's team
+SELECT DISTINCT u.* FROM urls u
+INNER JOIN team_members tm ON u.team_id = tm.team_id
+WHERE tm.user_id = $1 AND u.is_active = TRUE
+ORDER BY u.created_at DESC;
