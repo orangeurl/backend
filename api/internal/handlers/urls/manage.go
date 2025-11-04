@@ -36,8 +36,12 @@ func DeleteURL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
 	}
 
-	// Verify ownership
-	if urlRecord.UserID != user.ID {
+	// Verify ownership or team access
+	canAccess, err := queries.CanUserAccessURL(c.Context(), database.CanUserAccessURLParams{
+		ID:     parsedID,
+		UserID: user.ID,
+	})
+	if err != nil || !canAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
 	}
 
@@ -141,8 +145,12 @@ func GetURLDetails(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
 	}
 
-	// Verify ownership
-	if urlRecord.UserID != user.ID {
+	// Verify ownership or team access
+	canAccess, err := queries.CanUserAccessURL(c.Context(), database.CanUserAccessURLParams{
+		ID:     urlRecord.ID,
+		UserID: user.ID,
+	})
+	if err != nil || !canAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
 	}
 
@@ -190,8 +198,12 @@ func UpdateURL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "URL not found"})
 	}
 
-	// Verify ownership
-	if urlRecord.UserID != user.ID {
+	// Verify ownership or team access
+	canAccess, err := queries.CanUserAccessURL(c.Context(), database.CanUserAccessURLParams{
+		ID:     urlRecord.ID,
+		UserID: user.ID,
+	})
+	if err != nil || !canAccess {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
 	}
 

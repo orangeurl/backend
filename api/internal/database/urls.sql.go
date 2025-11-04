@@ -13,8 +13,8 @@ import (
 )
 
 const createURL = `-- name: CreateURL :one
-INSERT INTO urls (user_id, short_id, original_url, expiry, is_active, password_hash, is_locked)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO urls (user_id, short_id, original_url, expiry, is_active, password_hash, is_locked, team_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, user_id, short_id, original_url, expiry, is_active, created_at, updated_at, password_hash, is_locked, password_attempts, last_password_attempt, team_id
 `
 
@@ -26,6 +26,7 @@ type CreateURLParams struct {
 	IsActive     sql.NullBool   `json:"is_active"`
 	PasswordHash sql.NullString `json:"password_hash"`
 	IsLocked     sql.NullBool   `json:"is_locked"`
+	TeamID       uuid.NullUUID  `json:"team_id"`
 }
 
 func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, error) {
@@ -37,6 +38,7 @@ func (q *Queries) CreateURL(ctx context.Context, arg CreateURLParams) (Url, erro
 		arg.IsActive,
 		arg.PasswordHash,
 		arg.IsLocked,
+		arg.TeamID,
 	)
 	var i Url
 	err := row.Scan(
@@ -146,6 +148,65 @@ func (q *Queries) GetURLByShortID(ctx context.Context, shortID string) (Url, err
 		&i.TeamID,
 	)
 	return i, err
+}
+
+const getUserAndTeamURLCount = `-- name: GetUserAndTeamURLCount :one
+SELECT COUNT(DISTINCT u.id) FROM urls u
+LEFT JOIN team_members tm ON u.team_id = tm.team_id
+WHERE (u.user_id = $1 OR tm.user_id = $1) AND u.is_active = TRUE
+`
+
+// Count URLs owned by user OR shared with their team
+func (q *Queries) GetUserAndTeamURLCount(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getUserAndTeamURLCount, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getUserAndTeamURLs = `-- name: GetUserAndTeamURLs :many
+SELECT DISTINCT u.id, u.user_id, u.short_id, u.original_url, u.expiry, u.is_active, u.created_at, u.updated_at, u.password_hash, u.is_locked, u.password_attempts, u.last_password_attempt, u.team_id FROM urls u
+LEFT JOIN team_members tm ON u.team_id = tm.team_id
+WHERE (u.user_id = $1 OR tm.user_id = $1) AND u.is_active = TRUE
+ORDER BY u.created_at DESC
+`
+
+// Get URLs owned by user OR shared with their team
+func (q *Queries) GetUserAndTeamURLs(ctx context.Context, userID uuid.UUID) ([]Url, error) {
+	rows, err := q.db.QueryContext(ctx, getUserAndTeamURLs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Url
+	for rows.Next() {
+		var i Url
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ShortID,
+			&i.OriginalUrl,
+			&i.Expiry,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PasswordHash,
+			&i.IsLocked,
+			&i.PasswordAttempts,
+			&i.LastPasswordAttempt,
+			&i.TeamID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserURLByOriginalURL = `-- name: GetUserURLByOriginalURL :one

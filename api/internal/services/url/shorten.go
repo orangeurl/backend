@@ -13,6 +13,7 @@ import (
 	"github.com/asaskevich/govalidator"
 	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/url"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
@@ -85,6 +86,7 @@ type request struct {
 	CustomExpiry *time.Time    `json:"custom_expiry"` // Premium feature - specific expiry date
 	Password     string        `json:"password"`      // Premium feature - password protection
 	UseAI        bool          `json:"use_ai"`        // Premium feature - AI-powered URL generation
+	ShareWithTeam bool         `json:"share_with_team"` // Premium feature - share URL with team
 }
 
 type response struct {
@@ -391,7 +393,7 @@ func ShortenURL(c *fiber.Ctx) error {
 		// Handle password protection (Premium feature)
 		var passwordHash sql.NullString
 		var isLocked sql.NullBool
-		
+
 		if body.Password != "" && tier == "premium" {
 			// Hash the password using bcrypt
 			hashedPassword, hashErr := middleware.HashPassword(body.Password)
@@ -411,6 +413,26 @@ func ShortenURL(c *fiber.Ctx) error {
 			}
 		}
 
+		// Handle team assignment (Premium feature)
+		var teamID uuid.NullUUID
+
+		if body.ShareWithTeam {
+			// Check if user has a team (either as owner or member)
+			team, teamErr := queries.GetTeamByOwnerID(c.Context(), user.ID)
+			if teamErr != nil {
+				// Not owner, check if member of a team
+				team, teamErr = queries.GetTeamByMemberUserID(c.Context(), user.ID)
+			}
+
+			if teamErr == nil {
+				// User has a team, assign URL to it
+				teamID = uuid.NullUUID{UUID: team.ID, Valid: true}
+				log.Printf("[ShortenURL] Assigning URL %s to team %s for user %s", id, team.ID, user.ID)
+			} else {
+				log.Printf("[ShortenURL] User %s requested team sharing but is not in a team", user.ID)
+			}
+		}
+
 		createdURL, pgErr := queries.CreateURL(c.Context(), database.CreateURLParams{
 			UserID:       user.ID,
 			ShortID:      id,
@@ -419,6 +441,7 @@ func ShortenURL(c *fiber.Ctx) error {
 			IsActive:     sql.NullBool{Bool: true, Valid: true},
 			PasswordHash: passwordHash,
 			IsLocked:     isLocked,
+			TeamID:       teamID,
 		})
 
 		if pgErr != nil {

@@ -1,6 +1,6 @@
 -- name: CreateURL :one
-INSERT INTO urls (user_id, short_id, original_url, expiry, is_active, password_hash, is_locked)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO urls (user_id, short_id, original_url, expiry, is_active, password_hash, is_locked, team_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetURL :one
@@ -69,3 +69,16 @@ SET is_active = FALSE, updated_at = NOW()
 WHERE expiry IS NOT NULL
     AND expiry < $1
     AND is_active = TRUE;
+
+-- name: GetUserAndTeamURLs :many
+-- Get URLs owned by user OR shared with their team
+SELECT DISTINCT u.* FROM urls u
+LEFT JOIN team_members tm ON u.team_id = tm.team_id
+WHERE (u.user_id = $1 OR tm.user_id = $1) AND u.is_active = TRUE
+ORDER BY u.created_at DESC;
+
+-- name: GetUserAndTeamURLCount :one
+-- Count URLs owned by user OR shared with their team
+SELECT COUNT(DISTINCT u.id) FROM urls u
+LEFT JOIN team_members tm ON u.team_id = tm.team_id
+WHERE (u.user_id = $1 OR tm.user_id = $1) AND u.is_active = TRUE;

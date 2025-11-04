@@ -125,14 +125,14 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		log.Printf("[Dashboard] No subscription found (error: %v) - using user.subscription_tier: %s", subErr, planTier)
 	}
 
-	// Get URL count
+	// Get URL count (including team URLs)
 	log.Println("[Dashboard] Fetching URL count...")
-	urlCount, err := queries.GetUserURLCount(c.Context(), user.ID)
+	urlCount, err := queries.GetUserAndTeamURLCount(c.Context(), user.ID)
 	if err != nil {
 		log.Printf("[Dashboard] Error getting URL count: %v", err)
 		urlCount = 0
 	} else {
-		log.Printf("[Dashboard] URL count: %d", urlCount)
+		log.Printf("[Dashboard] URL count (including team URLs): %d", urlCount)
 	}
 
 	// Get click stats
@@ -236,10 +236,10 @@ func GetDashboardStats(c *fiber.Ctx) error {
 		log.Printf("[Dashboard] Found %d days of data", len(dateStats))
 	}
 
-	// Get recent URLs with stats
+	// Get recent URLs with stats (including team URLs)
 	log.Println("[Dashboard] Fetching recent URLs...")
 	recentURLs := make([]URLWithStats, 0)
-	urls, err := queries.GetUserURLs(c.Context(), user.ID)
+	urls, err := queries.GetUserAndTeamURLs(c.Context(), user.ID)
 	if err == nil {
 		log.Printf("[Dashboard] Found %d URLs", len(urls))
 		for _, url := range urls {
