@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"log"
 	"strings"
 	"time"
@@ -143,14 +144,12 @@ func RequirePermission(permission string) fiber.Handler {
 		// Parse permissions from JSONB
 		var permissions []string
 		if apiKey.Permissions.Valid {
-			// Try to parse the JSON array
-			permStr := string(apiKey.Permissions.RawMessage)
-			// Remove brackets and quotes, split by comma
-			permStr = strings.Trim(permStr, "[]")
-			permStr = strings.ReplaceAll(permStr, "\"", "")
-			permStr = strings.ReplaceAll(permStr, " ", "")
-			if permStr != "" {
-				permissions = strings.Split(permStr, ",")
+			// Properly unmarshal JSON array
+			if err := json.Unmarshal(apiKey.Permissions.RawMessage, &permissions); err != nil {
+				log.Printf("[API Auth] Failed to parse permissions for key ID %s: %v", apiKey.ID, err)
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Invalid API key configuration",
+				})
 			}
 		}
 

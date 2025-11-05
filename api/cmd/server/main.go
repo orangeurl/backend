@@ -129,7 +129,7 @@ func setupRoutes(app *fiber.App) {
 
 	// URL operations with permission checks
 	apiV1.Post("/urls", middleware.RequirePermission("urls:write"), urlService.ShortenURL)
-	apiV1.Get("/urls", middleware.RequirePermission("urls:read"), tracking.GetAllURLs)
+	apiV1.Get("/urls", middleware.RequirePermission("urls:read"), urls.GetUserURLs)
 	apiV1.Get("/urls/:shortId", middleware.RequirePermission("urls:read"), urls.GetURLDetails)
 	apiV1.Delete("/urls/:shortId", middleware.RequirePermission("urls:write"), urls.DeleteURL)
 	apiV1.Put("/urls/:shortId", middleware.RequirePermission("urls:write"), urls.UpdateURL)

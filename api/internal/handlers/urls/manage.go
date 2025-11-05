@@ -10,6 +10,26 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 )
 
+// GetUserURLs returns all URLs accessible by the authenticated user (owned or team-shared)
+func GetUserURLs(c *fiber.Ctx) error {
+	user, err := middleware.GetUserFromContext(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	queries := database.GetQueries()
+	urls, err := queries.GetUserAndTeamURLs(c.Context(), user.ID)
+	if err != nil {
+		log.Printf("[GetUserURLs] Error fetching URLs for user %s: %v", user.ID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch URLs"})
+	}
+
+	return c.JSON(fiber.Map{
+		"urls":  urls,
+		"count": len(urls),
+	})
+}
+
 // DeleteURL soft-deletes a URL (sets is_active to false) and removes from Redis
 func DeleteURL(c *fiber.Ctx) error {
 	user, err := middleware.GetUserFromContext(c)

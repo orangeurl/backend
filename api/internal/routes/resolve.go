@@ -325,8 +325,6 @@ func ResolveURL(c *fiber.Ctx) error {
 			"short_id":       url,
 			"long_url":       value,
 			"clicked_at":     time.Now().UTC().Format(time.RFC3339),
-			"ip":             ipAddress,
-			"user_agent":     userAgent,
 			"referer":        referer,
 			"referer_source": referrerSource,
 			"country":        country,

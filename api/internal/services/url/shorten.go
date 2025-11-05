@@ -460,7 +460,6 @@ func ShortenURL(c *fiber.Ctx) error {
 			"short_url":  shortURL,
 			"short_id":   id,
 			"long_url":   body.URL,
-			"user_id":    user.ID.String(),
 			"is_locked":  createdURL.IsLocked.Valid && createdURL.IsLocked.Bool,
 			"created_at": time.Now().UTC().Format(time.RFC3339),
 		})

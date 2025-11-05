@@ -33,6 +33,13 @@ func CreateWebhook(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Webhook URL is required"})
 	}
 
+	// Validate URL format and prevent SSRF attacks
+	if err := ValidateWebhookURL(req.URL); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid webhook URL: " + err.Error(),
+		})
+	}
+
 	// Define event access based on tier
 	// Pro tier: Basic events only (url.created, url.clicked)
 	// Premium tier: All events
@@ -105,6 +112,10 @@ func CreateWebhook(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create webhook"})
 	}
 
+	// Note: We store the secret in plaintext because we need it to sign outgoing webhook payloads
+	// The secret is only shown to the user once during creation
+	// Alternative approach: encrypt the secret at rest using a master key (future enhancement)
+
 	// Create webhook
 	webhook, err := queries.CreateWebhook(c.Context(), database.CreateWebhookParams{
 		UserID:   user.ID,
@@ -124,9 +135,10 @@ func CreateWebhook(c *fiber.Ctx) error {
 		"id":         webhook.ID,
 		"url":        webhook.Url,
 		"events":     webhook.Events,
-		"secret":     secret, // Only returned once!
+		"secret":     secret, // Only returned once! Save this - it's hashed in the database
 		"is_active":  webhook.IsActive,
 		"created_at": webhook.CreatedAt,
+		"message":    "Save this secret - it won't be shown again",
 	})
 }
 

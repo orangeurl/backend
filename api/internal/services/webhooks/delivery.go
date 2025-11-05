@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +33,48 @@ func TriggerWebhook(eventType string, userID uuid.UUID, data map[string]interfac
 	go func() {
 		ctx := context.Background()
 		queries := database.GetQueries()
+
+		// Check webhook delivery rate limit
+		r := database.CreateClient(0)
+		defer r.Close()
+
+		rateLimitKey := fmt.Sprintf("webhook_delivery_ratelimit:%s", userID)
+
+		// Get current count in last hour
+		currentCount, err := r.Get(ctx, rateLimitKey).Int64()
+		if err != nil && err.Error() != "redis: nil" {
+			log.Printf("[Webhook] Rate limit check failed: %v", err)
+		}
+
+		// Get user's subscription tier to determine rate limit
+		user, err := queries.GetUserByID(ctx, userID)
+		var maxDeliveriesPerHour int64
+		if err == nil {
+			switch user.SubscriptionTier {
+			case "pro":
+				maxDeliveriesPerHour = 10000
+			case "premium":
+				maxDeliveriesPerHour = 50000
+			default:
+				maxDeliveriesPerHour = 1000
+			}
+		} else {
+			maxDeliveriesPerHour = 1000 // Default to free tier limit
+		}
+
+		if currentCount >= maxDeliveriesPerHour {
+			log.Printf("[Webhook] Rate limit exceeded for user %s: %d/%d", userID, currentCount, maxDeliveriesPerHour)
+			return
+		}
+
+		// Increment counter
+		pipe := r.Pipeline()
+		pipe.Incr(ctx, rateLimitKey)
+		pipe.Expire(ctx, rateLimitKey, 1*time.Hour)
+		_, err = pipe.Exec(ctx)
+		if err != nil {
+			log.Printf("[Webhook] Failed to update rate limit counter: %v", err)
+		}
 
 		// Get all active webhooks subscribed to this event for the specific user
 		webhooks, err := queries.ListActiveWebhooksByEventAndUser(ctx, database.ListActiveWebhooksByEventAndUserParams{
@@ -103,8 +148,22 @@ func deliverWebhook(webhook database.Webhook, deliveryID uuid.UUID, payload []by
 			time.Sleep(backoffDurations[attempt])
 		}
 
-		// Calculate HMAC signature
-		signature := calculateSignature(payload, webhook.Secret)
+		// Re-validate webhook URL before each attempt to prevent DNS rebinding attacks
+		if err := validateWebhookURL(webhook.Url); err != nil {
+			lastErr = fmt.Errorf("URL validation failed: %w", err)
+			log.Printf("[Webhook] Delivery %s blocked: %v", deliveryID, lastErr)
+			break // Don't retry if URL becomes invalid
+		}
+
+		// Generate timestamp for replay attack protection
+		timestamp := time.Now().Unix()
+		timestampStr := fmt.Sprintf("%d", timestamp)
+
+		// Create signed payload: timestamp + "." + payload
+		signedContent := timestampStr + "." + string(payload)
+
+		// Calculate HMAC signature over timestamped payload
+		signature := calculateSignature([]byte(signedContent), webhook.Secret)
 
 		// Create HTTP request
 		req, err := http.NewRequest("POST", webhook.Url, bytes.NewBuffer(payload))
@@ -118,6 +177,8 @@ func deliverWebhook(webhook database.Webhook, deliveryID uuid.UUID, payload []by
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "OrangeURL-Webhooks/1.0")
 		req.Header.Set("X-OrangeURL-Signature", signature)
+		req.Header.Set("X-OrangeURL-Timestamp", timestampStr)
+		req.Header.Set("X-OrangeURL-Signature-Version", "2")
 		req.Header.Set("X-OrangeURL-Delivery-ID", deliveryID.String())
 		req.Header.Set("X-OrangeURL-Event", webhook.Events[0]) // Event type
 
@@ -186,4 +247,99 @@ func truncateString(s string, maxLength int) string {
 		return s
 	}
 	return s[:maxLength] + "..."
+}
+
+// validateWebhookURL validates a webhook URL to prevent SSRF and DNS rebinding attacks
+func validateWebhookURL(rawURL string) error {
+	// Parse URL
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	// Only allow HTTP and HTTPS schemes
+	scheme := strings.ToLower(parsedURL.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("only HTTP and HTTPS protocols are allowed")
+	}
+
+	// Extract hostname
+	hostname := parsedURL.Hostname()
+	if hostname == "" {
+		return fmt.Errorf("URL must contain a hostname")
+	}
+
+	// Resolve hostname to IP addresses
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("failed to resolve hostname: %w", err)
+	}
+
+	if len(ips) == 0 {
+		return fmt.Errorf("hostname does not resolve to any IP address")
+	}
+
+	// Check each resolved IP for private/internal addresses
+	for _, ip := range ips {
+		if err := validateIP(ip); err != nil {
+			return err
+		}
+	}
+
+	// Check for cloud metadata endpoints
+	if isMetadataEndpoint(hostname) {
+		return fmt.Errorf("requests to cloud metadata endpoints are not allowed")
+	}
+
+	return nil
+}
+
+// validateIP checks if an IP address is private, loopback, or otherwise restricted
+func validateIP(ip net.IP) error {
+	// Reject loopback addresses
+	if ip.IsLoopback() {
+		return fmt.Errorf("loopback addresses are not allowed")
+	}
+
+	// Reject private IP ranges
+	if ip.IsPrivate() {
+		return fmt.Errorf("private IP addresses are not allowed")
+	}
+
+	// Reject link-local addresses
+	if ip.IsLinkLocalUnicast() {
+		return fmt.Errorf("link-local addresses are not allowed")
+	}
+
+	// Reject multicast addresses
+	if ip.IsMulticast() {
+		return fmt.Errorf("multicast addresses are not allowed")
+	}
+
+	// Reject unspecified addresses
+	if ip.IsUnspecified() {
+		return fmt.Errorf("unspecified addresses are not allowed")
+	}
+
+	return nil
+}
+
+// isMetadataEndpoint checks for well-known cloud metadata endpoints
+func isMetadataEndpoint(hostname string) bool {
+	hostname = strings.ToLower(hostname)
+	metadataEndpoints := []string{
+		"169.254.169.254",
+		"metadata.google.internal",
+		"metadata",
+		"instance-data",
+		"fd00:ec2::254",
+	}
+
+	for _, endpoint := range metadataEndpoints {
+		if hostname == endpoint {
+			return true
+		}
+	}
+
+	return false
 }

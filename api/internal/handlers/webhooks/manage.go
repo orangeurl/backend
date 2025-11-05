@@ -109,6 +109,54 @@ func UpdateWebhook(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "URL and events are required"})
 	}
 
+	// Validate URL format and prevent SSRF attacks
+	if err := ValidateWebhookURL(req.URL); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid webhook URL: " + err.Error(),
+		})
+	}
+
+	// Define event access based on tier (same as CreateWebhook)
+	basicEvents := map[string]bool{
+		"url.created": true,
+		"url.clicked": true,
+	}
+
+	allEvents := map[string]bool{
+		"url.created": true,
+		"url.clicked": true,
+		"url.deleted": true,
+		"url.expired": true,
+	}
+
+	// Validate events
+	for _, event := range req.Events {
+		// First check if event is valid at all
+		if !allEvents[event] {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid event type: " + event,
+			})
+		}
+
+		// Pro tier can only use basic events
+		if user.SubscriptionTier == "pro" && !basicEvents[event] {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":       "Event not available for Pro tier",
+				"message":     "The event '" + event + "' is only available for Premium subscribers. Pro tier supports: url.created, url.clicked",
+				"upgrade_url": "https://orangeurl.live/pricing",
+			})
+		}
+
+		// Free tier can only use basic events
+		if user.SubscriptionTier != "premium" && !basicEvents[event] {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":       "Event requires Premium subscription",
+				"message":     "The event '" + event + "' is only available for Premium subscribers",
+				"upgrade_url": "https://orangeurl.live/pricing",
+			})
+		}
+	}
+
 	queries := database.GetQueries()
 
 	// Update webhook

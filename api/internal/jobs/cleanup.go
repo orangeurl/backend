@@ -94,6 +94,27 @@ func CleanupExpiredURLs() {
 	log.Println("[Cleanup] Expired URLs cleanup completed successfully")
 }
 
+// CleanupExpiredAPIKeys removes API keys that have passed their expiration date
+func CleanupExpiredAPIKeys() {
+	log.Println("[Cleanup] Starting expired API keys cleanup...")
+
+	queries := database.GetQueries()
+	if queries == nil {
+		log.Println("[Cleanup] Database not initialized, skipping cleanup")
+		return
+	}
+
+	ctx := context.Background()
+
+	err := queries.CleanupExpiredAPIKeys(ctx)
+	if err != nil {
+		log.Printf("[Cleanup] Error cleaning up expired API keys: %v", err)
+		return
+	}
+
+	log.Println("[Cleanup] Expired API keys cleanup completed successfully")
+}
+
 // StartCleanupScheduler runs cleanup jobs periodically
 func StartCleanupScheduler() {
 	// Run analytics cleanup daily at 2 AM
@@ -118,7 +139,18 @@ func StartCleanupScheduler() {
 		}
 	}()
 
-	log.Println("[Cleanup] Scheduler started - Analytics cleanup: daily, URL expiry cleanup: hourly")
+	// Run API key expiration cleanup every hour
+	apiKeyTicker := time.NewTicker(1 * time.Hour)
+	go func() {
+		// Run once immediately at startup
+		CleanupExpiredAPIKeys()
+
+		for range apiKeyTicker.C {
+			CleanupExpiredAPIKeys()
+		}
+	}()
+
+	log.Println("[Cleanup] Scheduler started - Analytics cleanup: daily, URL expiry cleanup: hourly, API key cleanup: hourly")
 }
 
 
