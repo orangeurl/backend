@@ -358,7 +358,7 @@ func ShortenURL(c *fiber.Ctx) error {
 			tier = subscription.PlanID
 		}
 		
-		tierLimit := 10 // Free tier default: 10 URLs per month
+		tierLimit := 5 // Free tier default: 5 URLs per month
 		if tier == "pro" {
 			tierLimit = 100 // Pro tier: 100 URLs per month
 		} else if tier == "premium" {

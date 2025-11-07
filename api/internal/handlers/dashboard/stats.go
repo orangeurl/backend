@@ -13,7 +13,7 @@ import (
 
 // Pricing tier limits
 const (
-	FreeTierLinks      = 10  // Free: 10 URLs per month
+	FreeTierLinks      = 5   // Free: 5 URLs per month
 	ProTierLinks       = 100 // Pro: 100 URLs per month
 	PremiumTierLinks   = 500 // Premium: 500 URLs per month
 	FreeTierRetention  = 30  // 1 month in days
