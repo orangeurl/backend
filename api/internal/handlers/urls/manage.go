@@ -3,6 +3,8 @@ package urls
 import (
 	"database/sql"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -24,9 +26,40 @@ func GetUserURLs(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch URLs"})
 	}
 
+	// Get domain for constructing short URLs
+	host := os.Getenv("DOMAIN")
+	if host == "" {
+		host = os.Getenv("PUBLIC_HOST")
+	}
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "https://" + host
+	}
+
+	// Transform URLs to proper JSON format (convert SQL null types)
+	transformedURLs := make([]fiber.Map, 0, len(urls))
+	for _, url := range urls {
+		urlData := fiber.Map{
+			"id":           url.ID,
+			"short_id":     url.ShortID,
+			"short_url":    host + "/" + url.ShortID,
+			"long_url":     url.OriginalUrl,
+			"original_url": url.OriginalUrl,
+			"is_locked":    url.IsLocked.Valid && url.IsLocked.Bool,
+			"is_active":    url.IsActive.Valid && url.IsActive.Bool,
+			"created_at":   url.CreatedAt.Time.Format("2006-01-02T15:04:05Z07:00"),
+		}
+
+		// Add expiry if set
+		if url.Expiry.Valid {
+			urlData["expiry"] = url.Expiry.Time.Format("2006-01-02T15:04:05Z07:00")
+		}
+
+		transformedURLs = append(transformedURLs, urlData)
+	}
+
 	return c.JSON(fiber.Map{
-		"urls":  urls,
-		"count": len(urls),
+		"urls":  transformedURLs,
+		"count": len(transformedURLs),
 	})
 }
 
