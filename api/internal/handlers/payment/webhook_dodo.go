@@ -34,6 +34,7 @@ type DodoSubscriptionData struct {
 	NextBillingDate     string        `json:"next_billing_date"`
 	PreviousBillingDate string        `json:"previous_billing_date"`
 	Customer            DodoCustomer  `json:"customer"`
+	Metadata            map[string]interface{} `json:"metadata,omitempty"`
 	Billing             struct {
 		City    string `json:"city"`
 		Country string `json:"country"`
@@ -101,24 +102,42 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 
 	queries := database.GetQueries()
 
-	// Extract customer from nested data
-	customerEmail := evt.Data.Customer.Email
-	if customerEmail == "" {
-		log.Printf("[DodoWebhook] ❌ No email in customer data")
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "missing customer email"})
+	// Try to get user_id from metadata first (more reliable than email)
+	var user database.User
+	var err error
+
+	if evt.Data.Metadata != nil {
+		if clerkID, ok := evt.Data.Metadata["user_id"].(string); ok && clerkID != "" {
+			log.Printf("[DodoWebhook] Found Clerk ID in metadata: %s", clerkID)
+			user, err = queries.GetUserByClerkID(c.Context(), clerkID)
+			if err == nil {
+				log.Printf("[DodoWebhook] ✅ Found user by Clerk ID: ID=%s, Email=%s", user.ID, user.Email)
+			} else {
+				log.Printf("[DodoWebhook] ⚠️  User not found by Clerk ID=%s: %v", clerkID, err)
+			}
+		}
 	}
 
-	log.Printf("[DodoWebhook] Customer Email: %s", customerEmail)
-	log.Printf("[DodoWebhook] Customer ID: %s", evt.Data.Customer.CustomerID)
-
-	user, err := queries.GetUserByEmail(c.Context(), customerEmail)
+	// Fallback to email lookup if Clerk ID lookup failed
 	if err != nil {
-		log.Printf("[DodoWebhook] ⚠️  User not found for email=%s: %v", customerEmail, err)
-		// Optional: return 200 to avoid retries if you only create subs post-registration
-		return c.Status(http.StatusOK).JSON(fiber.Map{"message": "user not registered yet"})
-	}
+		customerEmail := evt.Data.Customer.Email
+		if customerEmail == "" {
+			log.Printf("[DodoWebhook] ❌ No email in customer data and no valid Clerk ID in metadata")
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "missing customer identification"})
+		}
 
-	log.Printf("[DodoWebhook] ✅ Found user: ID=%s, Email=%s", user.ID, user.Email)
+		log.Printf("[DodoWebhook] Customer Email: %s", customerEmail)
+		log.Printf("[DodoWebhook] Customer ID: %s", evt.Data.Customer.CustomerID)
+
+		user, err = queries.GetUserByEmail(c.Context(), customerEmail)
+		if err != nil {
+			log.Printf("[DodoWebhook] ⚠️  User not found for email=%s: %v", customerEmail, err)
+			// Optional: return 200 to avoid retries if you only create subs post-registration
+			return c.Status(http.StatusOK).JSON(fiber.Map{"message": "user not registered yet"})
+		}
+
+		log.Printf("[DodoWebhook] ✅ Found user by email: ID=%s, Email=%s", user.ID, user.Email)
+	}
 
 	// Get plan info from data
 	planID := evt.Data.ProductID
