@@ -13,6 +13,17 @@ JOIN urls u ON uc.url_id = u.id
 WHERE u.user_id = $1
 ORDER BY uc.clicked_at DESC;
 
+-- name: GetRecentClicksWithURL :many
+SELECT
+    uc.*,
+    u.short_id,
+    u.original_url
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+ORDER BY uc.clicked_at DESC
+LIMIT $2;
+
 -- name: GetURLClicksByBrowser :many
 SELECT 
     browser,

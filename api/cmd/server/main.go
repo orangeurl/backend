@@ -141,6 +141,7 @@ func setupRoutes(app *fiber.App) {
 	// Analytics operations with permission checks
 	apiV1.Get("/analytics/urls/:shortId", middleware.RequirePermission("analytics:read"), dashboard.GetURLAnalytics)
 	apiV1.Get("/analytics/overview", middleware.RequirePermission("analytics:read"), dashboard.GetDashboardStats)
+	apiV1.Get("/analytics/clicks", middleware.RequirePermission("analytics:read"), dashboard.GetRecentClicks)
 
 	// Webhook operations with permission checks (API key-based)
 	apiV1.Get("/webhooks", middleware.RequirePermission("webhooks:read"), webhooks.ListWebhooks)

@@ -98,6 +98,78 @@ func (q *Queries) GetMonthlyClickStats(ctx context.Context, userID uuid.UUID) (i
 	return monthly_clicks, err
 }
 
+const getRecentClicksWithURL = `-- name: GetRecentClicksWithURL :many
+SELECT
+    uc.id, uc.url_id, uc.ip_address, uc.user_agent, uc.referer, uc.country, uc.city, uc.device_type, uc.browser, uc.os, uc.is_bot, uc.clicked_at,
+    u.short_id,
+    u.original_url
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+ORDER BY uc.clicked_at DESC
+LIMIT $2
+`
+
+type GetRecentClicksWithURLParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	Limit  int32     `json:"limit"`
+}
+
+type GetRecentClicksWithURLRow struct {
+	ID          uuid.UUID      `json:"id"`
+	UrlID       uuid.UUID      `json:"url_id"`
+	IpAddress   pqtype.Inet    `json:"ip_address"`
+	UserAgent   sql.NullString `json:"user_agent"`
+	Referer     sql.NullString `json:"referer"`
+	Country     sql.NullString `json:"country"`
+	City        sql.NullString `json:"city"`
+	DeviceType  sql.NullString `json:"device_type"`
+	Browser     sql.NullString `json:"browser"`
+	Os          sql.NullString `json:"os"`
+	IsBot       sql.NullBool   `json:"is_bot"`
+	ClickedAt   sql.NullTime   `json:"clicked_at"`
+	ShortID     string         `json:"short_id"`
+	OriginalUrl string         `json:"original_url"`
+}
+
+func (q *Queries) GetRecentClicksWithURL(ctx context.Context, arg GetRecentClicksWithURLParams) ([]GetRecentClicksWithURLRow, error) {
+	rows, err := q.db.QueryContext(ctx, getRecentClicksWithURL, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetRecentClicksWithURLRow
+	for rows.Next() {
+		var i GetRecentClicksWithURLRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UrlID,
+			&i.IpAddress,
+			&i.UserAgent,
+			&i.Referer,
+			&i.Country,
+			&i.City,
+			&i.DeviceType,
+			&i.Browser,
+			&i.Os,
+			&i.IsBot,
+			&i.ClickedAt,
+			&i.ShortID,
+			&i.OriginalUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getURLAnalytics = `-- name: GetURLAnalytics :many
 SELECT id, url_id, ip_address, user_agent, referer, country, city, device_type, browser, os, is_bot, clicked_at FROM url_clicks WHERE url_id = $1
 ORDER BY clicked_at DESC
