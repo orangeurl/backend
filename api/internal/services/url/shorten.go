@@ -358,7 +358,7 @@ func ShortenURL(c *fiber.Ctx) error {
 	defer r.Close()
 
 	// Check for collision and add retry logic for AI-generated IDs
-	val, _ = r.Get(database.Ctx, id).Result()
+	val, err := r.Get(database.Ctx, id).Result()
 	if val != "" {
 		// If this was an AI-generated ID and it collided, try adding a random suffix
 		if body.UseAI && body.CustomShort == "" {
@@ -372,7 +372,7 @@ func ShortenURL(c *fiber.Ctx) error {
 					id = id[:10] // Keep max 10 chars
 				}
 
-				val, _ = r.Get(database.Ctx, id).Result()
+				val, _ := r.Get(database.Ctx, id).Result()
 				if val == "" {
 					log.Printf("[ShortenURL] AI ID collision resolved: %s -> %s", originalID, id)
 					break
@@ -431,7 +431,7 @@ func ShortenURL(c *fiber.Ctx) error {
 
 	// Sync with Postgres database if user is authenticated
 	// OptionalAuth middleware will have set user in context if token was provided
-	user, userErr := middleware.GetUserFromContext(c)
+	user, userErr = middleware.GetUserFromContext(c)
 	if userErr == nil {
 		// User is authenticated, save URL to their account in Postgres
 		queries := database.GetQueries()
