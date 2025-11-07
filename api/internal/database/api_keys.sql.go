@@ -14,9 +14,8 @@ import (
 )
 
 const cleanupExpiredAPIKeys = `-- name: CleanupExpiredAPIKeys :exec
-UPDATE api_keys
-SET is_active = FALSE, updated_at = NOW()
-WHERE expires_at IS NOT NULL AND expires_at < NOW() AND is_active = TRUE
+DELETE FROM api_keys
+WHERE expires_at IS NOT NULL AND expires_at < NOW()
 `
 
 func (q *Queries) CleanupExpiredAPIKeys(ctx context.Context) error {

@@ -57,6 +57,5 @@ SELECT COUNT(*) FROM api_keys
 WHERE user_id = $1 AND is_active = TRUE;
 
 -- name: CleanupExpiredAPIKeys :exec
-UPDATE api_keys
-SET is_active = FALSE, updated_at = NOW()
-WHERE expires_at IS NOT NULL AND expires_at < NOW() AND is_active = TRUE;
+DELETE FROM api_keys
+WHERE expires_at IS NOT NULL AND expires_at < NOW();
