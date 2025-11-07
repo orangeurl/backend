@@ -49,20 +49,27 @@ func GetRecentClicks(c *fiber.Ctx) error {
 		host = "https://" + host
 	}
 
-	// Transform clicks to match Zapier expected structure
+	// Transform clicks to match Zapier webhook payload structure EXACTLY
 	result := make([]fiber.Map, 0)
 	for _, click := range clicks {
+		// Format clicked_at as RFC3339 string
+		clickedAtStr := ""
+		if click.ClickedAt.Valid {
+			clickedAtStr = click.ClickedAt.Time.Format("2006-01-02T15:04:05Z07:00")
+		}
+
 		clickData := fiber.Map{
 			"short_url":      host + "/" + click.ShortID,
 			"short_id":       click.ShortID,
-			"clicked_at":     click.ClickedAt,
-			"country":        click.Country,
-			"city":           click.City,
-			"device_type":    click.DeviceType,
-			"browser":        click.Browser,
-			"os":             click.Os,
-			"referer":        click.Referer,
+			"long_url":       click.OriginalUrl,
+			"clicked_at":     clickedAtStr,
+			"referer":        click.Referer.String,
 			"referer_source": extractRefererSource(click.Referer.String),
+			"country":        click.Country.String,
+			"city":           click.City.String,
+			"device_type":    click.DeviceType.String,
+			"browser":        click.Browser.String,
+			"os":             click.Os.String,
 			"is_bot":         click.IsBot.Bool,
 		}
 		result = append(result, clickData)
