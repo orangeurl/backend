@@ -17,6 +17,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/dashboard"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/docs"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/payment"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/qr"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/teams"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/urls"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
@@ -99,6 +100,9 @@ func setupRoutes(app *fiber.App) {
 
 	// Public unlock endpoint (no auth required, but rate limited to prevent brute force)
 	app.Post("/api/unlock/:shortId", middleware.AuthRateLimit(), urls.UnlockURL)
+
+	// QR Code tracking (requires auth)
+	api.Post("/qr/track", middleware.RequireAuth(), qr.TrackQRCodeGeneration)
 
 	// API Key Management (requires JWT auth)
 	api.Post("/api-keys", middleware.RequireAuth(), api_keys.CreateAPIKey)

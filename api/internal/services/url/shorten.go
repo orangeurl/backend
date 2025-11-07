@@ -3,6 +3,7 @@ package url
 import (
 	"crypto/rand"
 	"database/sql"
+	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -105,32 +106,85 @@ func ShortenURL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "cannot parse json"})
 	}
 
-	// rate limiting
+	// Rate limiting - tier-based for authenticated users, IP-based for anonymous
 	r2 := database.CreateClient(1)
 	defer r2.Close()
 
-	// determine effective quota once (fallback to 10 if unset)
-	quota := os.Getenv("API_QUOTA")
-	if quota == "" {
-		quota = "100"
-	}
+	// Check if user is authenticated
+	user, userErr := middleware.GetUserFromContext(c)
 
-	val, err := r2.Get(database.Ctx, c.IP()).Result()
-	if err == redis.Nil {
-		// initialize quota for this IP
-		r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
+	if userErr == nil {
+		// Authenticated user - apply tier-based rate limiting
+		queries := database.GetQueries()
+		if queries != nil {
+			// Determine tier
+			tier := user.SubscriptionTier
+			subscription, subErr := queries.GetUserSubscription(c.Context(), user.ID)
+			if subErr == nil && subscription.PlanID != "" {
+				tier = subscription.PlanID
+			}
+
+			// Set rate limits per hour based on tier
+			var hourlyLimit int64
+			switch tier {
+			case "free":
+				hourlyLimit = 100 // Free: 100 requests/hour
+			case "pro":
+				hourlyLimit = 1000 // Pro: 1,000 requests/hour
+			case "premium":
+				hourlyLimit = 10000 // Premium: 10,000 requests/hour
+			default:
+				hourlyLimit = 100
+			}
+
+			// Use hourly window for rate limiting
+			currentHour := time.Now().Unix() / 3600
+			rateLimitKey := fmt.Sprintf("url_ratelimit:%s:%d", user.ID, currentHour)
+
+			val, err := r2.Incr(database.Ctx, rateLimitKey).Result()
+			if err == nil {
+				// Set expiry on first request (1 hour)
+				if val == 1 {
+					r2.Expire(database.Ctx, rateLimitKey, 1*time.Hour)
+				}
+
+				// Check if limit exceeded
+				if val > hourlyLimit {
+					ttl, _ := r2.TTL(database.Ctx, rateLimitKey).Result()
+					return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+						"error":   "Rate limit exceeded",
+						"limit":   hourlyLimit,
+						"used":    val,
+						"tier":    tier,
+						"reset_in": int(ttl.Seconds()),
+						"message": fmt.Sprintf("You've reached your hourly rate limit of %d requests for %s tier", hourlyLimit, tier),
+					})
+				}
+			}
+		}
 	} else {
-		valInt, convErr := strconv.Atoi(val)
-		if convErr != nil {
-			// repair bad value by resetting quota
+		// Anonymous user - apply IP-based rate limiting (existing behavior)
+		quota := os.Getenv("API_QUOTA")
+		if quota == "" {
+			quota = "100"
+		}
+
+		val, err := r2.Get(database.Ctx, c.IP()).Result()
+		if err == redis.Nil {
+			// initialize quota for this IP
 			r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
-		} else if valInt <= 0 {
-			limit, _ := r2.TTL(database.Ctx, c.IP()).Result()
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error": "Rate limit exceeded",
-				//doubt
-				"rate_limit_rest": limit / time.Nanosecond / time.Minute,
-			})
+		} else {
+			valInt, convErr := strconv.Atoi(val)
+			if convErr != nil {
+				// repair bad value by resetting quota
+				r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
+			} else if valInt <= 0 {
+				limit, _ := r2.TTL(database.Ctx, c.IP()).Result()
+				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+					"error": "Rate limit exceeded",
+					"rate_limit_reset": limit / time.Nanosecond / time.Minute,
+				})
+			}
 		}
 	}
 
@@ -224,6 +278,53 @@ func ShortenURL(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "Custom short URL can only contain letters, numbers, hyphens, and underscores (1-50 characters)",
 			})
+		}
+
+		// Check custom link limit for authenticated users
+		user, userErr := middleware.GetUserFromContext(c)
+		if userErr == nil {
+			// User is authenticated, check custom link limit
+			queries := database.GetQueries()
+			if queries != nil {
+				currentMonth := time.Now().Format("2006-01")
+				usage, err := queries.GetMonthlyUsage(c.Context(), database.GetMonthlyUsageParams{
+					UserID: user.ID,
+					Month:  currentMonth,
+				})
+
+				// Determine user tier
+				tier := "free"
+				subscription, subErr := queries.GetUserSubscription(c.Context(), user.ID)
+				if subErr == nil && subscription.PlanID != "" {
+					tier = subscription.PlanID
+				}
+
+				// Set custom link limits based on tier
+				customLinkLimit := 0 // Free tier: no custom links
+				if tier == "pro" {
+					customLinkLimit = 5 // Pro tier: 5 custom links per month
+				} else if tier == "premium" {
+					customLinkLimit = 15 // Premium tier: 15 custom links per month
+				}
+
+				// If free tier, reject custom links
+				if tier == "free" {
+					return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+						"error":   "Custom links not available",
+						"message": "Upgrade to Pro or Premium to use custom short URLs.",
+					})
+				}
+
+				// Check if user has exceeded custom link limit
+				if err == nil && usage.CustomLinkCount >= int32(customLinkLimit) {
+					return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+						"error":   "Custom link limit reached",
+						"message": "You've reached your monthly custom link limit. Upgrade your plan for more custom links.",
+						"limit":   customLinkLimit,
+						"used":    usage.CustomLinkCount,
+					})
+				}
+			}
 		}
 
 		// Preserve exact capitalization as provided by user (e.g., "Snow" stays "Snow", not "snow")
@@ -445,6 +546,15 @@ func ShortenURL(c *fiber.Ctx) error {
 			UserID: user.ID,
 			Month:  currentMonth,
 		})
+
+		// Increment custom link counter if custom short URL was provided
+		if body.CustomShort != "" {
+			_, _ = queries.IncrementCustomLinkCount(c.Context(), database.IncrementCustomLinkCountParams{
+				UserID: user.ID,
+				Month:  currentMonth,
+			})
+			log.Printf("[ShortenURL] Custom link counter incremented for user: %s", user.ID)
+		}
 
 		// Trigger webhook for url.created event
 		host := os.Getenv("DOMAIN")
