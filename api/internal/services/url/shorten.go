@@ -52,28 +52,34 @@ func generateShortIDFallback(length int) string {
 }
 
 // isValidCustomShortURL validates custom short URLs for security
-// Only allows alphanumeric characters, hyphens, and underscores
+// Only allows alphanumeric characters, hyphens, and underscores for regular users
+// Admins can use any characters except dangerous patterns
 // Prevents path traversal, XSS, and other injection attacks
-func isValidCustomShortURL(shortURL string) bool {
+func isValidCustomShortURL(shortURL string, isAdmin bool) bool {
 	if shortURL == "" || len(shortURL) > 50 {
 		return false
 	}
 
-	// Only allow alphanumeric characters, hyphens, and underscores
+	// Block common attack patterns for everyone (including admins)
+	blockedPatterns := []string{"..", "./", "\\", "<", ">", "\"", "'", "`"}
+	lowerShort := strings.ToLower(shortURL)
+	for _, pattern := range blockedPatterns {
+		if strings.Contains(lowerShort, pattern) {
+			return false
+		}
+	}
+
+	// If admin, allow all characters (except blocked patterns above)
+	if isAdmin {
+		return true
+	}
+
+	// For regular users, only allow alphanumeric characters, hyphens, and underscores
 	for _, char := range shortURL {
 		if !((char >= 'a' && char <= 'z') ||
 			(char >= 'A' && char <= 'Z') ||
 			(char >= '0' && char <= '9') ||
 			char == '-' || char == '_') {
-			return false
-		}
-	}
-
-	// Block common attack patterns
-	blockedPatterns := []string{"..", "./", "\\", "<", ">", "\"", "'", "`"}
-	lowerShort := strings.ToLower(shortURL)
-	for _, pattern := range blockedPatterns {
-		if strings.Contains(lowerShort, pattern) {
 			return false
 		}
 	}
@@ -273,15 +279,33 @@ func ShortenURL(c *fiber.Ctx) error {
 			id = generateShortID(shortURLLength)
 		}
 	} else {
+		// Check if user is admin first to allow validation with admin privileges
+		user, userErr := middleware.GetUserFromContext(c)
+		isAdmin := false
+
+		if userErr == nil {
+			queries := database.GetQueries()
+			if queries != nil {
+				userDetails, err := queries.GetUserByID(c.Context(), user.ID)
+				if err == nil {
+					isAdmin = userDetails.IsAdmin.Valid && userDetails.IsAdmin.Bool
+				}
+			}
+		}
+
 		// Validate custom short URL for security
-		if !isValidCustomShortURL(body.CustomShort) {
+		if !isValidCustomShortURL(body.CustomShort, isAdmin) {
+			if isAdmin {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Custom short URL cannot contain dangerous patterns like .., ./, \\, <, >, quotes",
+				})
+			}
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "Custom short URL can only contain letters, numbers, hyphens, and underscores (1-50 characters)",
 			})
 		}
 
 		// Check custom link limit for authenticated users
-		user, userErr := middleware.GetUserFromContext(c)
 		if userErr == nil {
 			// User is authenticated, check custom link limit
 			queries := database.GetQueries()
