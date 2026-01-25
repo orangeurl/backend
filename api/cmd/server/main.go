@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 	"github.com/xenonnn4w/orangeurl/internal/database"
+	"github.com/xenonnn4w/orangeurl/internal/handlers/admin"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/analytics"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/api_keys"
 	"github.com/xenonnn4w/orangeurl/internal/handlers/auth"
@@ -127,6 +128,12 @@ func setupRoutes(app *fiber.App) {
 	// Team URL Management (requires JWT auth - Premium only, owner only)
 	api.Post("/teams/urls/:urlID/assign", middleware.RequireAuth(), teams.AssignURLToTeam)
 	api.Delete("/teams/urls/:urlID/unassign", middleware.RequireAuth(), teams.UnassignURLFromTeam)
+
+	// Admin routes for abuse management (requires JWT auth + admin role)
+	api.Post("/admin/block", middleware.RequireAuth(), middleware.AdminAuditLog(), admin.BlockURL)
+	api.Delete("/admin/block/:shortId", middleware.RequireAuth(), middleware.AdminAuditLog(), admin.UnblockURL)
+	api.Get("/admin/blocked", middleware.RequireAuth(), middleware.AdminAuditLog(), admin.ListBlockedURLs)
+	api.Get("/admin/blocked/:shortId", middleware.RequireAuth(), admin.IsURLBlocked)
 
 	// Public API (v1) - Requires API Key + Rate Limiting
 	apiV1 := app.Group("/api/v1", middleware.RequireAPIKey(), middleware.APIRateLimit())

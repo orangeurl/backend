@@ -96,3 +96,7 @@ SELECT DISTINCT u.* FROM urls u
 INNER JOIN team_members tm ON u.team_id = tm.team_id
 WHERE tm.user_id = $1 AND u.is_active = TRUE
 ORDER BY u.created_at DESC;
+
+-- name: DeactivateURLByShortID :exec
+-- Admin: Deactivate a URL by short_id (used when blocking abusive URLs)
+UPDATE urls SET is_active = FALSE, updated_at = NOW() WHERE short_id = $1;

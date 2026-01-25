@@ -87,6 +87,16 @@ type BioPageView struct {
 	ViewedAt  sql.NullTime   `json:"viewed_at"`
 }
 
+type BlockedUrl struct {
+	ID             uuid.UUID      `json:"id"`
+	ShortID        string         `json:"short_id"`
+	OriginalUrl    sql.NullString `json:"original_url"`
+	BlockReason    string         `json:"block_reason"`
+	BlockedBy      uuid.NullUUID  `json:"blocked_by"`
+	AbuseReportRef sql.NullString `json:"abuse_report_ref"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+}
+
 type MonthlyUsage struct {
 	ID              uuid.UUID    `json:"id"`
 	UserID          uuid.UUID    `json:"user_id"`

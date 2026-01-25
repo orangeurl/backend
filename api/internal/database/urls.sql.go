@@ -72,6 +72,16 @@ func (q *Queries) DeactivateExpiredURLs(ctx context.Context, expiry sql.NullTime
 	return err
 }
 
+const deactivateURLByShortID = `-- name: DeactivateURLByShortID :exec
+UPDATE urls SET is_active = FALSE, updated_at = NOW() WHERE short_id = $1
+`
+
+// Admin: Deactivate a URL by short_id (used when blocking abusive URLs)
+func (q *Queries) DeactivateURLByShortID(ctx context.Context, shortID string) error {
+	_, err := q.db.ExecContext(ctx, deactivateURLByShortID, shortID)
+	return err
+}
+
 const deleteURL = `-- name: DeleteURL :exec
 UPDATE urls SET is_active = FALSE WHERE id = $1 AND user_id = $2
 `

@@ -200,6 +200,27 @@ func extractCountryFromHeaders(c *fiber.Ctx) string {
 func ResolveURL(c *fiber.Ctx) error {
 	url := c.Params("url")
 
+	// First, check if this URL is blocked (abuse reports, etc.)
+	queries := database.GetQueries()
+	isBlocked, _ := queries.IsURLBlocked(c.Context(), url)
+	if isBlocked {
+		log.Printf("[ResolveURL] ⛔ Blocked URL access attempt: %s", url)
+		c.Status(403)
+		return c.Type("html").SendString(`
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<meta http-equiv="refresh" content="0;url=https://app.orangeurl.live/broken-link">
+				<title>Link Blocked</title>
+			</head>
+			<body>
+				<p>This link has been blocked due to abuse. Redirecting...</p>
+				<script>window.location.href='https://app.orangeurl.live/broken-link';</script>
+			</body>
+			</html>
+		`)
+	}
+
 	r := database.CreateClient(0)
 	defer r.Close()
 
@@ -244,7 +265,6 @@ func ResolveURL(c *fiber.Ctx) error {
 	_ = rInr.Incr(database.Ctx, "counter")
 
 	// Track analytics in Postgres if URL exists in database
-	queries := database.GetQueries()
 	urlRecord, pgErr := queries.GetURLByShortID(c.Context(), url)
 	if pgErr == nil {
 		// URL found in Postgres, track the click

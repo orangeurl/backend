@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 
+	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
 
@@ -35,4 +36,14 @@ func NewNullRawMessage(data []byte) pqtype.NullRawMessage {
 		return pqtype.NullRawMessage{Valid: false}
 	}
 	return pqtype.NullRawMessage{RawMessage: data, Valid: true}
+}
+
+// ToNullString creates a sql.NullString from a string (alias for NewNullString)
+func ToNullString(s string) sql.NullString {
+	return NewNullString(s)
+}
+
+// ToNullUUID creates a uuid.NullUUID from a uuid.UUID
+func ToNullUUID(id uuid.UUID) uuid.NullUUID {
+	return uuid.NullUUID{UUID: id, Valid: true}
 }
