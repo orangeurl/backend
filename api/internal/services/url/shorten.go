@@ -199,6 +199,15 @@ func ShortenURL(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Only http and https URLs are allowed"})
 	}
 
+	// Check for suspicious/phishing domains
+	if isSuspicious, reason := url.IsSuspiciousDomain(body.URL); isSuspicious {
+		log.Printf("[ShortenURL] ⚠️ Blocked suspicious domain: %s - Reason: %s", body.URL, reason)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "This domain is not allowed due to abuse concerns",
+			"reason": reason,
+		})
+	}
+
 	// checking if the url is an actual url
 	if !govalidator.IsURL(body.URL) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid URL"})
