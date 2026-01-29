@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
@@ -169,29 +168,12 @@ func ShortenURL(c *fiber.Ctx) error {
 			}
 		}
 	} else {
-		// Anonymous user - apply IP-based rate limiting (existing behavior)
-		quota := os.Getenv("API_QUOTA")
-		if quota == "" {
-			quota = "100"
-		}
-
-		val, err := r2.Get(database.Ctx, c.IP()).Result()
-		if err == redis.Nil {
-			// initialize quota for this IP
-			r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
-		} else {
-			valInt, convErr := strconv.Atoi(val)
-			if convErr != nil {
-				// repair bad value by resetting quota
-				r2.Set(database.Ctx, c.IP(), quota, 30*60*time.Second).Err()
-			} else if valInt <= 0 {
-				limit, _ := r2.TTL(database.Ctx, c.IP()).Result()
-				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-					"error": "Rate limit exceeded",
-					"rate_limit_reset": limit / time.Nanosecond / time.Minute,
-				})
-			}
-		}
+		// Anonymous users are no longer allowed - require authentication to prevent phishing abuse
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":   "Authentication required",
+			"message": "Please sign in to create short URLs. This helps us prevent phishing and abuse.",
+			"code":    "LOGIN_REQUIRED",
+		})
 	}
 
 	// Validate URL protocol first (block javascript:, data:, etc.)
