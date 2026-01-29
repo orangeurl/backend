@@ -116,7 +116,7 @@ func ShortenURL(c *fiber.Ctx) error {
 	// Also store in PostgreSQL for analytics and persistence
 	queries := database.GetQueries()
 	
-	// Get user from context (if authenticated)
+	// Get user from context - authentication is now REQUIRED
 	userID := c.Locals("user_id")
 	fmt.Printf("🔍 [URL] User ID from context: %+v (type: %T)\n", userID, userID)
 	
@@ -132,26 +132,15 @@ func ShortenURL(c *fiber.Ctx) error {
 		fmt.Printf("❌ [URL] No user ID in context\n")
 	}
 	
-	// If no authenticated user, use system user for anonymous links
+	// Authentication is required - no anonymous URL creation allowed
 	if userUUID == nil {
-		// Create or get system user for anonymous links
-		systemUser, err := queries.GetUserByClerkID(database.Ctx, "system_anonymous")
-		if err != nil {
-			// Create system user if it doesn't exist
-			systemUser, err = queries.CreateUser(database.Ctx, database.CreateUserParams{
-				ClerkID:   "system_anonymous",
-				Email:     "anonymous@orangeurl.live",
-				FirstName: "Anonymous",
-				LastName:  "User",
-				AvatarUrl: sql.NullString{String: "", Valid: false},
-			})
-			if err != nil {
-				fmt.Printf("❌ [URL] Failed to create system user: %v\n", err)
-				r.Del(database.Ctx, id)
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "unable to create system user"})
-			}
-		}
-		userUUID = &systemUser.ID
+		fmt.Printf("❌ [URL] Rejecting anonymous URL creation - login required\n")
+		r.Del(database.Ctx, id)
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":   "Authentication required",
+			"message": "Please sign in to create short URLs. This helps us prevent abuse and phishing.",
+			"code":    "LOGIN_REQUIRED",
+		})
 	}
 	
 	// Calculate expiry time
