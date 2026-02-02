@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -185,18 +186,16 @@ func GetUserAnalytics(c *fiber.Ctx) error {
 
 	// Get clicks over time
 	clicksOverTimeRows, err := queries.GetUserClicksOverTime(c.Context(), database.GetUserClicksOverTimeParams{
-		UserID: user.ID,
-		ClickedAt: startDate,
+		UserID:    user.ID,
+		ClickedAt: sql.NullTime{Time: startDate, Valid: true},
 	})
 	clicksOverTime := make([]TimeSeriesData, 0)
 	if err == nil {
 		for _, row := range clicksOverTimeRows {
-			if row.Date.Valid {
-				clicksOverTime = append(clicksOverTime, TimeSeriesData{
-					Date:       row.Date.Time.Format("2006-01-02"),
-					ClickCount: row.ClickCount,
-				})
-			}
+			clicksOverTime = append(clicksOverTime, TimeSeriesData{
+				Date:       row.Date.Format("2006-01-02"),
+				ClickCount: row.ClickCount,
+			})
 		}
 	}
 
@@ -212,7 +211,7 @@ func GetUserAnalytics(c *fiber.Ctx) error {
 				ID:          row.ID,
 				ShortID:     row.ShortID,
 				OriginalURL: row.OriginalUrl,
-				ClickCount:  row.ClickCount.Int64,
+				ClickCount:  row.ClickCount,
 			})
 		}
 	}
@@ -220,8 +219,8 @@ func GetUserAnalytics(c *fiber.Ctx) error {
 	// Get bot percentage
 	botPercentageResult, err := queries.GetUserBotClicksPercentage(c.Context(), user.ID)
 	botPercentage := 0.0
-	if err == nil && botPercentageResult.Valid {
-		botPercentage = botPercentageResult.Float64
+	if err == nil {
+		botPercentage = float64(botPercentageResult)
 	}
 
 	analytics := AnalyticsResponse{
@@ -347,18 +346,16 @@ func GetURLAnalytics(c *fiber.Ctx) error {
 
 	// Get clicks over time
 	clicksOverTimeRows, err := queries.GetURLClicksOverTime(c.Context(), database.GetURLClicksOverTimeParams{
-		UrlID: urlID,
-		ClickedAt: startDate,
+		UrlID:     urlID,
+		ClickedAt: sql.NullTime{Time: startDate, Valid: true},
 	})
 	clicksOverTime := make([]TimeSeriesData, 0)
 	if err == nil {
 		for _, row := range clicksOverTimeRows {
-			if row.Date.Valid {
-				clicksOverTime = append(clicksOverTime, TimeSeriesData{
-					Date:       row.Date.Time.Format("2006-01-02"),
-					ClickCount: row.ClickCount,
-				})
-			}
+			clicksOverTime = append(clicksOverTime, TimeSeriesData{
+				Date:       row.Date.Format("2006-01-02"),
+				ClickCount: row.ClickCount,
+			})
 		}
 	}
 

@@ -8,6 +8,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
@@ -63,6 +64,23 @@ func (q *Queries) CreateClick(ctx context.Context, arg CreateClickParams) (UrlCl
 	return i, err
 }
 
+const deleteOldClicksByDate = `-- name: DeleteOldClicksByDate :exec
+DELETE FROM url_clicks
+WHERE url_id IN (
+    SELECT id FROM urls WHERE user_id = $1
+) AND clicked_at < $2
+`
+
+type DeleteOldClicksByDateParams struct {
+	UserID    uuid.UUID
+	ClickedAt sql.NullTime
+}
+
+func (q *Queries) DeleteOldClicksByDate(ctx context.Context, arg DeleteOldClicksByDateParams) error {
+	_, err := q.db.ExecContext(ctx, deleteOldClicksByDate, arg.UserID, arg.ClickedAt)
+	return err
+}
+
 const getURLAnalytics = `-- name: GetURLAnalytics :many
 SELECT id, url_id, ip_address, user_agent, referer, country, city, device_type, browser, os, is_bot, clicked_at FROM url_clicks WHERE url_id = $1
 ORDER BY clicked_at DESC
@@ -91,6 +109,291 @@ func (q *Queries) GetURLAnalytics(ctx context.Context, urlID uuid.UUID) ([]UrlCl
 			&i.IsBot,
 			&i.ClickedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLAnalyticsWithLimit = `-- name: GetURLAnalyticsWithLimit :many
+SELECT id, url_id, ip_address, user_agent, referer, country, city, device_type, browser, os, is_bot, clicked_at FROM url_clicks WHERE url_id = $1
+ORDER BY clicked_at DESC
+LIMIT $2
+`
+
+type GetURLAnalyticsWithLimitParams struct {
+	UrlID uuid.UUID
+	Limit int32
+}
+
+func (q *Queries) GetURLAnalyticsWithLimit(ctx context.Context, arg GetURLAnalyticsWithLimitParams) ([]UrlClick, error) {
+	rows, err := q.db.QueryContext(ctx, getURLAnalyticsWithLimit, arg.UrlID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UrlClick
+	for rows.Next() {
+		var i UrlClick
+		if err := rows.Scan(
+			&i.ID,
+			&i.UrlID,
+			&i.IpAddress,
+			&i.UserAgent,
+			&i.Referer,
+			&i.Country,
+			&i.City,
+			&i.DeviceType,
+			&i.Browser,
+			&i.Os,
+			&i.IsBot,
+			&i.ClickedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLClickCount = `-- name: GetURLClickCount :one
+SELECT COUNT(*) as click_count FROM url_clicks WHERE url_id = $1
+`
+
+func (q *Queries) GetURLClickCount(ctx context.Context, urlID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getURLClickCount, urlID)
+	var click_count int64
+	err := row.Scan(&click_count)
+	return click_count, err
+}
+
+const getURLClicksByBrowser = `-- name: GetURLClicksByBrowser :many
+SELECT browser, COUNT(*) as click_count 
+FROM url_clicks 
+WHERE url_id = $1 AND browser IS NOT NULL
+GROUP BY browser
+ORDER BY click_count DESC
+`
+
+type GetURLClicksByBrowserRow struct {
+	Browser    sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetURLClicksByBrowser(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByBrowserRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLClicksByBrowser, urlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLClicksByBrowserRow
+	for rows.Next() {
+		var i GetURLClicksByBrowserRow
+		if err := rows.Scan(&i.Browser, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLClicksByCountry = `-- name: GetURLClicksByCountry :many
+SELECT country, COUNT(*) as click_count 
+FROM url_clicks 
+WHERE url_id = $1 AND country IS NOT NULL
+GROUP BY country
+ORDER BY click_count DESC
+`
+
+type GetURLClicksByCountryRow struct {
+	Country    sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetURLClicksByCountry(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByCountryRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLClicksByCountry, urlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLClicksByCountryRow
+	for rows.Next() {
+		var i GetURLClicksByCountryRow
+		if err := rows.Scan(&i.Country, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLClicksByDevice = `-- name: GetURLClicksByDevice :many
+SELECT device_type, COUNT(*) as click_count 
+FROM url_clicks 
+WHERE url_id = $1 AND device_type IS NOT NULL
+GROUP BY device_type
+ORDER BY click_count DESC
+`
+
+type GetURLClicksByDeviceRow struct {
+	DeviceType sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetURLClicksByDevice(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByDeviceRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLClicksByDevice, urlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLClicksByDeviceRow
+	for rows.Next() {
+		var i GetURLClicksByDeviceRow
+		if err := rows.Scan(&i.DeviceType, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLClicksByOS = `-- name: GetURLClicksByOS :many
+SELECT os, COUNT(*) as click_count 
+FROM url_clicks 
+WHERE url_id = $1 AND os IS NOT NULL
+GROUP BY os
+ORDER BY click_count DESC
+`
+
+type GetURLClicksByOSRow struct {
+	Os         sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetURLClicksByOS(ctx context.Context, urlID uuid.UUID) ([]GetURLClicksByOSRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLClicksByOS, urlID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLClicksByOSRow
+	for rows.Next() {
+		var i GetURLClicksByOSRow
+		if err := rows.Scan(&i.Os, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLClicksOverTime = `-- name: GetURLClicksOverTime :many
+SELECT DATE(clicked_at) as date, COUNT(*) as click_count
+FROM url_clicks
+WHERE url_id = $1 AND clicked_at >= $2
+GROUP BY DATE(clicked_at)
+ORDER BY date DESC
+`
+
+type GetURLClicksOverTimeParams struct {
+	UrlID     uuid.UUID
+	ClickedAt sql.NullTime
+}
+
+type GetURLClicksOverTimeRow struct {
+	Date       time.Time
+	ClickCount int64
+}
+
+func (q *Queries) GetURLClicksOverTime(ctx context.Context, arg GetURLClicksOverTimeParams) ([]GetURLClicksOverTimeRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLClicksOverTime, arg.UrlID, arg.ClickedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLClicksOverTimeRow
+	for rows.Next() {
+		var i GetURLClicksOverTimeRow
+		if err := rows.Scan(&i.Date, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getURLReferrers = `-- name: GetURLReferrers :many
+SELECT referer, COUNT(*) as click_count
+FROM url_clicks
+WHERE url_id = $1 AND referer IS NOT NULL AND referer != ''
+GROUP BY referer
+ORDER BY click_count DESC
+LIMIT $2
+`
+
+type GetURLReferrersParams struct {
+	UrlID uuid.UUID
+	Limit int32
+}
+
+type GetURLReferrersRow struct {
+	Referer    sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetURLReferrers(ctx context.Context, arg GetURLReferrersParams) ([]GetURLReferrersRow, error) {
+	rows, err := q.db.QueryContext(ctx, getURLReferrers, arg.UrlID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetURLReferrersRow
+	for rows.Next() {
+		var i GetURLReferrersRow
+		if err := rows.Scan(&i.Referer, &i.ClickCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -145,4 +448,321 @@ func (q *Queries) GetUserAnalytics(ctx context.Context, userID uuid.UUID) ([]Url
 		return nil, err
 	}
 	return items, nil
+}
+
+const getUserAnalyticsWithDateRange = `-- name: GetUserAnalyticsWithDateRange :many
+SELECT uc.id, uc.url_id, uc.ip_address, uc.user_agent, uc.referer, uc.country, uc.city, uc.device_type, uc.browser, uc.os, uc.is_bot, uc.clicked_at FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.clicked_at >= $2 AND uc.clicked_at <= $3
+ORDER BY uc.clicked_at DESC
+`
+
+type GetUserAnalyticsWithDateRangeParams struct {
+	UserID      uuid.UUID
+	ClickedAt   sql.NullTime
+	ClickedAt_2 sql.NullTime
+}
+
+func (q *Queries) GetUserAnalyticsWithDateRange(ctx context.Context, arg GetUserAnalyticsWithDateRangeParams) ([]UrlClick, error) {
+	rows, err := q.db.QueryContext(ctx, getUserAnalyticsWithDateRange, arg.UserID, arg.ClickedAt, arg.ClickedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UrlClick
+	for rows.Next() {
+		var i UrlClick
+		if err := rows.Scan(
+			&i.ID,
+			&i.UrlID,
+			&i.IpAddress,
+			&i.UserAgent,
+			&i.Referer,
+			&i.Country,
+			&i.City,
+			&i.DeviceType,
+			&i.Browser,
+			&i.Os,
+			&i.IsBot,
+			&i.ClickedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserBotClicksPercentage = `-- name: GetUserBotClicksPercentage :one
+SELECT 
+    COUNT(CASE WHEN uc.is_bot = TRUE THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0) * 100 as bot_percentage
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+`
+
+func (q *Queries) GetUserBotClicksPercentage(ctx context.Context, userID uuid.UUID) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getUserBotClicksPercentage, userID)
+	var bot_percentage int32
+	err := row.Scan(&bot_percentage)
+	return bot_percentage, err
+}
+
+const getUserClicksByBrowser = `-- name: GetUserClicksByBrowser :many
+SELECT uc.browser, COUNT(*) as click_count 
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.browser IS NOT NULL
+GROUP BY uc.browser
+ORDER BY click_count DESC
+`
+
+type GetUserClicksByBrowserRow struct {
+	Browser    sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetUserClicksByBrowser(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByBrowserRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByBrowser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByBrowserRow
+	for rows.Next() {
+		var i GetUserClicksByBrowserRow
+		if err := rows.Scan(&i.Browser, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserClicksByCountry = `-- name: GetUserClicksByCountry :many
+SELECT uc.country, COUNT(*) as click_count 
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.country IS NOT NULL
+GROUP BY uc.country
+ORDER BY click_count DESC
+`
+
+type GetUserClicksByCountryRow struct {
+	Country    sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetUserClicksByCountry(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByCountryRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByCountry, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByCountryRow
+	for rows.Next() {
+		var i GetUserClicksByCountryRow
+		if err := rows.Scan(&i.Country, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserClicksByDevice = `-- name: GetUserClicksByDevice :many
+SELECT uc.device_type, COUNT(*) as click_count 
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.device_type IS NOT NULL
+GROUP BY uc.device_type
+ORDER BY click_count DESC
+`
+
+type GetUserClicksByDeviceRow struct {
+	DeviceType sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetUserClicksByDevice(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByDeviceRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByDevice, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByDeviceRow
+	for rows.Next() {
+		var i GetUserClicksByDeviceRow
+		if err := rows.Scan(&i.DeviceType, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserClicksByOS = `-- name: GetUserClicksByOS :many
+SELECT uc.os, COUNT(*) as click_count 
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.os IS NOT NULL
+GROUP BY uc.os
+ORDER BY click_count DESC
+`
+
+type GetUserClicksByOSRow struct {
+	Os         sql.NullString
+	ClickCount int64
+}
+
+func (q *Queries) GetUserClicksByOS(ctx context.Context, userID uuid.UUID) ([]GetUserClicksByOSRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksByOS, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksByOSRow
+	for rows.Next() {
+		var i GetUserClicksByOSRow
+		if err := rows.Scan(&i.Os, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserClicksOverTime = `-- name: GetUserClicksOverTime :many
+SELECT DATE(uc.clicked_at) as date, COUNT(*) as click_count
+FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1 AND uc.clicked_at >= $2
+GROUP BY DATE(uc.clicked_at)
+ORDER BY date DESC
+`
+
+type GetUserClicksOverTimeParams struct {
+	UserID    uuid.UUID
+	ClickedAt sql.NullTime
+}
+
+type GetUserClicksOverTimeRow struct {
+	Date       time.Time
+	ClickCount int64
+}
+
+func (q *Queries) GetUserClicksOverTime(ctx context.Context, arg GetUserClicksOverTimeParams) ([]GetUserClicksOverTimeRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserClicksOverTime, arg.UserID, arg.ClickedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserClicksOverTimeRow
+	for rows.Next() {
+		var i GetUserClicksOverTimeRow
+		if err := rows.Scan(&i.Date, &i.ClickCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserTopURLs = `-- name: GetUserTopURLs :many
+SELECT u.id, u.short_id, u.original_url, COUNT(uc.id) as click_count
+FROM urls u
+LEFT JOIN url_clicks uc ON u.id = uc.url_id
+WHERE u.user_id = $1 AND u.is_active = TRUE
+GROUP BY u.id, u.short_id, u.original_url
+ORDER BY click_count DESC
+LIMIT $2
+`
+
+type GetUserTopURLsParams struct {
+	UserID uuid.UUID
+	Limit  int32
+}
+
+type GetUserTopURLsRow struct {
+	ID          uuid.UUID
+	ShortID     string
+	OriginalUrl string
+	ClickCount  int64
+}
+
+func (q *Queries) GetUserTopURLs(ctx context.Context, arg GetUserTopURLsParams) ([]GetUserTopURLsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserTopURLs, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserTopURLsRow
+	for rows.Next() {
+		var i GetUserTopURLsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ShortID,
+			&i.OriginalUrl,
+			&i.ClickCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserTotalClicks = `-- name: GetUserTotalClicks :one
+SELECT COUNT(*) as total_clicks FROM url_clicks uc
+JOIN urls u ON uc.url_id = u.id
+WHERE u.user_id = $1
+`
+
+func (q *Queries) GetUserTotalClicks(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getUserTotalClicks, userID)
+	var total_clicks int64
+	err := row.Scan(&total_clicks)
+	return total_clicks, err
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/handlers/waitlist"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 	"github.com/xenonnn4w/orangeurl/internal/routes"
+	"github.com/xenonnn4w/orangeurl/internal/services/subscription"
 	"github.com/xenonnn4w/orangeurl/internal/services/tracking"
 	"github.com/xenonnn4w/orangeurl/internal/services/url"
 )
@@ -35,6 +37,13 @@ func setupRoutes(app *fiber.App) {
 
 	// Webhook routes (public - no auth required)
 	app.Post("/api/webhooks/clerk", auth.HandleClerkWebhook)
+	app.Post("/api/webhooks/dodo", subscription.HandleDodoWebhook)
+
+	// Internal API routes (protected by internal API key, not user auth)
+	internal := app.Group("/api/internal")
+	internal.Post("/subscription/update", subscription.HandleUpdateSubscription)
+	internal.Post("/subscription/downgrade", subscription.HandleDowngradeSubscription)
+	internal.Post("/subscription/reset-usage", subscription.HandleResetUsage)
 
 	// Waitlist route (public - no auth required)
 	app.Post("/api/v1/api/waitlist", waitlist.JoinWaitlist)
@@ -61,6 +70,9 @@ func setupRoutes(app *fiber.App) {
 	api.Get("/analytics", analytics.GetUserAnalytics)
 	api.Get("/analytics/url/:urlId", analytics.GetURLAnalytics)
 
+	// Subscription info route
+	api.Get("/subscription/info", subscription.HandleGetSubscriptionInfo)
+
 	api.Get("/dashboard/stats", func(c *fiber.Ctx) error {
 		user, err := middleware.GetUserFromContext(c)
 		if err != nil {
@@ -85,6 +97,11 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.ClosePostgres()
+
+	// Start subscription renewal cron job
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	subscription.StartRenewalCron(ctx)
 
 	app := fiber.New()
 	app.Use(logger.New())

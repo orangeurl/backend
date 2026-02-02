@@ -22,6 +22,11 @@ type Subscription struct {
 	DodopaymentsCustomerID     sql.NullString
 	CreatedAt                  sql.NullTime
 	UpdatedAt                  sql.NullTime
+	BillingInterval            sql.NullString
+	UrlsCreatedThisPeriod      sql.NullInt32
+	UrlUsageResetAt            sql.NullTime
+	FailedPaymentCount         sql.NullInt32
+	LastPaymentFailureAt       sql.NullTime
 }
 
 type Url struct {
