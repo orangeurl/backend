@@ -7,21 +7,22 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/xenonnn4w/orangeurl/internal/database"
 )
 
 // SubscriptionInfo holds subscription details for API responses
 type SubscriptionInfo struct {
-	UserID              string     `json:"user_id"`
-	PlanID              string     `json:"plan_id"`
-	Status              string     `json:"status"`
-	BillingInterval     string     `json:"billing_interval"`
-	CurrentPeriodStart  *time.Time `json:"current_period_start"`
-	CurrentPeriodEnd    *time.Time `json:"current_period_end"`
-	URLsCreatedThisPeriod int32    `json:"urls_created_this_period"`
-	URLUsageResetAt     *time.Time `json:"url_usage_reset_at"`
-	URLLimit            int        `json:"url_limit"`
-	URLsRemaining       int        `json:"urls_remaining"`
+	UserID                string     `json:"user_id"`
+	PlanID                string     `json:"plan_id"`
+	Status                string     `json:"status"`
+	BillingInterval       string     `json:"billing_interval"`
+	CurrentPeriodStart    *time.Time `json:"current_period_start"`
+	CurrentPeriodEnd      *time.Time `json:"current_period_end"`
+	URLsCreatedThisPeriod int32      `json:"urls_created_this_period"`
+	URLUsageResetAt       *time.Time `json:"url_usage_reset_at"`
+	URLLimit              int        `json:"url_limit"`
+	URLsRemaining         int        `json:"urls_remaining"`
 }
 
 // URL limits per plan
@@ -32,7 +33,7 @@ var planURLLimits = map[string]int{
 }
 
 // GetSubscriptionInfo returns subscription info for a user
-func GetSubscriptionInfo(ctx context.Context, userID string) (*SubscriptionInfo, error) {
+func GetSubscriptionInfo(ctx context.Context, userID uuid.UUID) (*SubscriptionInfo, error) {
 	queries := database.GetQueries()
 
 	sub, err := queries.GetUserSubscription(ctx, userID)
@@ -40,7 +41,7 @@ func GetSubscriptionInfo(ctx context.Context, userID string) (*SubscriptionInfo,
 		if err == sql.ErrNoRows {
 			// Return free tier defaults
 			return &SubscriptionInfo{
-				UserID:          userID,
+				UserID:          userID.String(),
 				PlanID:          "free",
 				Status:          "active",
 				BillingInterval: "",
@@ -61,7 +62,7 @@ func GetSubscriptionInfo(ctx context.Context, userID string) (*SubscriptionInfo,
 	}
 
 	info := &SubscriptionInfo{
-		UserID:                sub.UserID,
+		UserID:                sub.UserID.String(),
 		PlanID:                sub.PlanID,
 		Status:                sub.Status,
 		BillingInterval:       sub.BillingInterval.String,
@@ -84,7 +85,7 @@ func GetSubscriptionInfo(ctx context.Context, userID string) (*SubscriptionInfo,
 }
 
 // CheckURLLimit checks if a user can create more URLs
-func CheckURLLimit(ctx context.Context, userID string) (bool, int, error) {
+func CheckURLLimit(ctx context.Context, userID uuid.UUID) (bool, int, error) {
 	info, err := GetSubscriptionInfo(ctx, userID)
 	if err != nil {
 		return false, 0, err
@@ -99,14 +100,14 @@ func CheckURLLimit(ctx context.Context, userID string) (bool, int, error) {
 }
 
 // IncrementURLUsage increments the URL count for a user
-func IncrementURLUsage(ctx context.Context, userID string) error {
+func IncrementURLUsage(ctx context.Context, userID uuid.UUID) error {
 	queries := database.GetQueries()
 	_, err := queries.IncrementUrlUsage(ctx, userID)
 	return err
 }
 
 // ResetURLUsageForUser resets the URL count for a specific user
-func ResetURLUsageForUser(ctx context.Context, userID string, periodStart, periodEnd time.Time) error {
+func ResetURLUsageForUser(ctx context.Context, userID uuid.UUID, periodStart, periodEnd time.Time) error {
 	queries := database.GetQueries()
 	_, err := queries.ResetSubscriptionPeriod(ctx, database.ResetSubscriptionPeriodParams{
 		UserID:             userID,
@@ -117,7 +118,7 @@ func ResetURLUsageForUser(ctx context.Context, userID string, periodStart, perio
 }
 
 // DowngradeToFree downgrades a user to the free plan
-func DowngradeToFree(ctx context.Context, userID string) error {
+func DowngradeToFree(ctx context.Context, userID uuid.UUID) error {
 	queries := database.GetQueries()
 
 	_, err := queries.DowngradeToFree(ctx, userID)
@@ -125,7 +126,7 @@ func DowngradeToFree(ctx context.Context, userID string) error {
 		return err
 	}
 
-	_, err = queries.UpdateUserSubscriptionTier(ctx, database.UpdateUserSubscriptionTierParams{
+	err = queries.UpdateUserSubscriptionTier(ctx, database.UpdateUserSubscriptionTierParams{
 		ID:               userID,
 		SubscriptionTier: "free",
 	})
@@ -147,9 +148,9 @@ func ProcessExpiredSubscriptions(ctx context.Context) error {
 	for _, sub := range subs {
 		// If subscription hasn't been renewed by payment processor, it's expired
 		if sub.CurrentPeriodEnd.Valid && sub.CurrentPeriodEnd.Time.Before(time.Now()) {
-			log.Printf("Subscription for user %s has expired, downgrading to free", sub.UserID)
+			log.Printf("Subscription for user %s has expired, downgrading to free", sub.UserID.String())
 			if err := DowngradeToFree(ctx, sub.UserID); err != nil {
-				log.Printf("Failed to downgrade user %s: %v", sub.UserID, err)
+				log.Printf("Failed to downgrade user %s: %v", sub.UserID.String(), err)
 			}
 		}
 	}
