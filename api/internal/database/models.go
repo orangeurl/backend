@@ -122,6 +122,10 @@ type Subscription struct {
 	BillingInterval            sql.NullString `json:"billing_interval"`
 	CancelAtPeriodEnd          sql.NullBool   `json:"cancel_at_period_end"`
 	Currency                   sql.NullString `json:"currency"`
+	UrlsCreatedThisPeriod      sql.NullInt32  `json:"urls_created_this_period"`
+	UrlUsageResetAt            sql.NullTime   `json:"url_usage_reset_at"`
+	FailedPaymentCount         sql.NullInt32  `json:"failed_payment_count"`
+	LastPaymentFailureAt       sql.NullTime   `json:"last_payment_failure_at"`
 }
 
 type Team struct {

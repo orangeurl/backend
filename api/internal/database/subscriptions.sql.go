@@ -15,7 +15,7 @@ import (
 const createSubscription = `-- name: CreateSubscription :one
 INSERT INTO subscriptions (user_id, plan_id, status, dodopayments_customer_id)
 VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
 `
 
 type CreateSubscriptionParams struct {
@@ -47,12 +47,135 @@ func (q *Queries) CreateSubscription(ctx context.Context, arg CreateSubscription
 		&i.BillingInterval,
 		&i.CancelAtPeriodEnd,
 		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
 	)
 	return i, err
 }
 
+const downgradeToFree = `-- name: DowngradeToFree :one
+UPDATE subscriptions 
+SET 
+    plan_id = 'free',
+    status = 'cancelled',
+    updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
+`
+
+func (q *Queries) DowngradeToFree(ctx context.Context, userID uuid.UUID) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, downgradeToFree, userID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
+	)
+	return i, err
+}
+
+const getActiveSubscriptionsCount = `-- name: GetActiveSubscriptionsCount :one
+SELECT COUNT(*) as count FROM subscriptions WHERE status = 'active'
+`
+
+func (q *Queries) GetActiveSubscriptionsCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getActiveSubscriptionsCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getSubscriptionUsage = `-- name: GetSubscriptionUsage :one
+SELECT urls_created_this_period, url_usage_reset_at, billing_interval, current_period_end 
+FROM subscriptions 
+WHERE user_id = $1
+`
+
+type GetSubscriptionUsageRow struct {
+	UrlsCreatedThisPeriod sql.NullInt32  `json:"urls_created_this_period"`
+	UrlUsageResetAt       sql.NullTime   `json:"url_usage_reset_at"`
+	BillingInterval       sql.NullString `json:"billing_interval"`
+	CurrentPeriodEnd      sql.NullTime   `json:"current_period_end"`
+}
+
+func (q *Queries) GetSubscriptionUsage(ctx context.Context, userID uuid.UUID) (GetSubscriptionUsageRow, error) {
+	row := q.db.QueryRowContext(ctx, getSubscriptionUsage, userID)
+	var i GetSubscriptionUsageRow
+	err := row.Scan(
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.BillingInterval,
+		&i.CurrentPeriodEnd,
+	)
+	return i, err
+}
+
+const getSubscriptionsForRenewal = `-- name: GetSubscriptionsForRenewal :many
+SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at FROM subscriptions 
+WHERE status = 'active' 
+AND current_period_end <= NOW() + INTERVAL '1 hour'
+ORDER BY current_period_end ASC
+`
+
+func (q *Queries) GetSubscriptionsForRenewal(ctx context.Context) ([]Subscription, error) {
+	rows, err := q.db.QueryContext(ctx, getSubscriptionsForRenewal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Subscription
+	for rows.Next() {
+		var i Subscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.PlanID,
+			&i.Status,
+			&i.CurrentPeriodStart,
+			&i.CurrentPeriodEnd,
+			&i.DodopaymentsSubscriptionID,
+			&i.DodopaymentsCustomerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.BillingInterval,
+			&i.CancelAtPeriodEnd,
+			&i.Currency,
+			&i.UrlsCreatedThisPeriod,
+			&i.UrlUsageResetAt,
+			&i.FailedPaymentCount,
+			&i.LastPaymentFailureAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserSubscription = `-- name: GetUserSubscription :one
-SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency FROM subscriptions WHERE user_id = $1
+SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at FROM subscriptions WHERE user_id = $1
 `
 
 func (q *Queries) GetUserSubscription(ctx context.Context, userID uuid.UUID) (Subscription, error) {
@@ -72,12 +195,48 @@ func (q *Queries) GetUserSubscription(ctx context.Context, userID uuid.UUID) (Su
 		&i.BillingInterval,
 		&i.CancelAtPeriodEnd,
 		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
+	)
+	return i, err
+}
+
+const incrementUrlUsage = `-- name: IncrementUrlUsage :one
+UPDATE subscriptions 
+SET urls_created_this_period = urls_created_this_period + 1, updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
+`
+
+func (q *Queries) IncrementUrlUsage(ctx context.Context, userID uuid.UUID) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, incrementUrlUsage, userID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
 	)
 	return i, err
 }
 
 const listSubscriptions = `-- name: ListSubscriptions :many
-SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency FROM subscriptions ORDER BY created_at DESC
+SELECT id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at FROM subscriptions ORDER BY created_at DESC
 `
 
 func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error) {
@@ -103,6 +262,10 @@ func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error)
 			&i.BillingInterval,
 			&i.CancelAtPeriodEnd,
 			&i.Currency,
+			&i.UrlsCreatedThisPeriod,
+			&i.UrlUsageResetAt,
+			&i.FailedPaymentCount,
+			&i.LastPaymentFailureAt,
 		); err != nil {
 			return nil, err
 		}
@@ -117,11 +280,89 @@ func (q *Queries) ListSubscriptions(ctx context.Context) ([]Subscription, error)
 	return items, nil
 }
 
+const recordPaymentFailure = `-- name: RecordPaymentFailure :one
+UPDATE subscriptions 
+SET 
+    failed_payment_count = failed_payment_count + 1,
+    last_payment_failure_at = NOW(),
+    updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
+`
+
+func (q *Queries) RecordPaymentFailure(ctx context.Context, userID uuid.UUID) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, recordPaymentFailure, userID)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
+	)
+	return i, err
+}
+
+const resetSubscriptionPeriod = `-- name: ResetSubscriptionPeriod :one
+UPDATE subscriptions 
+SET 
+    urls_created_this_period = 0,
+    url_usage_reset_at = NOW(),
+    current_period_start = $2,
+    current_period_end = $3,
+    updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
+`
+
+type ResetSubscriptionPeriodParams struct {
+	UserID             uuid.UUID    `json:"user_id"`
+	CurrentPeriodStart sql.NullTime `json:"current_period_start"`
+	CurrentPeriodEnd   sql.NullTime `json:"current_period_end"`
+}
+
+func (q *Queries) ResetSubscriptionPeriod(ctx context.Context, arg ResetSubscriptionPeriodParams) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, resetSubscriptionPeriod, arg.UserID, arg.CurrentPeriodStart, arg.CurrentPeriodEnd)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
+	)
+	return i, err
+}
+
 const updateSubscription = `-- name: UpdateSubscription :one
 UPDATE subscriptions 
 SET plan_id = $2, status = $3, current_period_start = $4, current_period_end = $5, updated_at = NOW()
 WHERE user_id = $1
-RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
 `
 
 type UpdateSubscriptionParams struct {
@@ -155,6 +396,10 @@ func (q *Queries) UpdateSubscription(ctx context.Context, arg UpdateSubscription
 		&i.BillingInterval,
 		&i.CancelAtPeriodEnd,
 		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
 	)
 	return i, err
 }
@@ -166,7 +411,7 @@ SET
   dodopayments_customer_id = COALESCE($3, dodopayments_customer_id),
   updated_at = NOW()
 WHERE user_id = $1
-RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
 `
 
 type UpdateSubscriptionSetDPIDsParams struct {
@@ -192,6 +437,104 @@ func (q *Queries) UpdateSubscriptionSetDPIDs(ctx context.Context, arg UpdateSubs
 		&i.BillingInterval,
 		&i.CancelAtPeriodEnd,
 		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
+	)
+	return i, err
+}
+
+const updateSubscriptionStatus = `-- name: UpdateSubscriptionStatus :one
+UPDATE subscriptions 
+SET status = $2, updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
+`
+
+type UpdateSubscriptionStatusParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	Status string    `json:"status"`
+}
+
+func (q *Queries) UpdateSubscriptionStatus(ctx context.Context, arg UpdateSubscriptionStatusParams) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, updateSubscriptionStatus, arg.UserID, arg.Status)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
+	)
+	return i, err
+}
+
+const updateSubscriptionWithBilling = `-- name: UpdateSubscriptionWithBilling :one
+UPDATE subscriptions 
+SET 
+    plan_id = $2,
+    status = $3,
+    billing_interval = $4,
+    current_period_start = $5,
+    current_period_end = $6,
+    urls_created_this_period = 0,
+    url_usage_reset_at = NOW(),
+    failed_payment_count = 0,
+    updated_at = NOW()
+WHERE user_id = $1
+RETURNING id, user_id, plan_id, status, current_period_start, current_period_end, dodopayments_subscription_id, dodopayments_customer_id, created_at, updated_at, billing_interval, cancel_at_period_end, currency, urls_created_this_period, url_usage_reset_at, failed_payment_count, last_payment_failure_at
+`
+
+type UpdateSubscriptionWithBillingParams struct {
+	UserID             uuid.UUID      `json:"user_id"`
+	PlanID             string         `json:"plan_id"`
+	Status             string         `json:"status"`
+	BillingInterval    sql.NullString `json:"billing_interval"`
+	CurrentPeriodStart sql.NullTime   `json:"current_period_start"`
+	CurrentPeriodEnd   sql.NullTime   `json:"current_period_end"`
+}
+
+func (q *Queries) UpdateSubscriptionWithBilling(ctx context.Context, arg UpdateSubscriptionWithBillingParams) (Subscription, error) {
+	row := q.db.QueryRowContext(ctx, updateSubscriptionWithBilling,
+		arg.UserID,
+		arg.PlanID,
+		arg.Status,
+		arg.BillingInterval,
+		arg.CurrentPeriodStart,
+		arg.CurrentPeriodEnd,
+	)
+	var i Subscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PlanID,
+		&i.Status,
+		&i.CurrentPeriodStart,
+		&i.CurrentPeriodEnd,
+		&i.DodopaymentsSubscriptionID,
+		&i.DodopaymentsCustomerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.BillingInterval,
+		&i.CancelAtPeriodEnd,
+		&i.Currency,
+		&i.UrlsCreatedThisPeriod,
+		&i.UrlUsageResetAt,
+		&i.FailedPaymentCount,
+		&i.LastPaymentFailureAt,
 	)
 	return i, err
 }

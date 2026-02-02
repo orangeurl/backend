@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/xenonnn4w/orangeurl/internal/jobs"
 	"github.com/xenonnn4w/orangeurl/internal/middleware"
 	"github.com/xenonnn4w/orangeurl/internal/routes"
+	"github.com/xenonnn4w/orangeurl/internal/services/subscription"
 	"github.com/xenonnn4w/orangeurl/internal/services/tracking"
 	urlService "github.com/xenonnn4w/orangeurl/internal/services/url"
 )
@@ -71,7 +73,10 @@ func setupRoutes(app *fiber.App) {
 
 	// Webhook routes (public - no auth required, but rate limited)
 	app.Post("/api/webhooks/clerk", middleware.WebhookRateLimit(), auth.HandleClerkWebhook)
-	app.Post("/api/webhooks/dodo", middleware.WebhookRateLimit(), payment.HandleDodoWebhook)
+	app.Post("/api/webhooks/dodo", middleware.WebhookRateLimit(), subscription.HandleDodoWebhook)
+
+	// Legacy dodo webhook handler (keep for backward compatibility)
+	app.Post("/api/webhooks/dodo-legacy", middleware.WebhookRateLimit(), payment.HandleDodoWebhook)
 
 	// Waitlist route (public - no auth required)
 	app.Post("/api/v1/api/waitlist", waitlist.JoinWaitlist)
@@ -84,6 +89,10 @@ func setupRoutes(app *fiber.App) {
 	api.Get("/dashboard/urls/:shortId/analytics", middleware.RequireAuth(), dashboard.GetURLAnalytics)
 	api.Get("/dashboard/urls/personal", middleware.RequireAuth(), dashboard.GetPersonalURLs)
 	api.Get("/dashboard/urls/team", middleware.RequireAuth(), dashboard.GetTeamURLs)
+
+	// Subscription info routes (with auth)
+	api.Get("/subscription/info", middleware.RequireAuth(), subscription.HandleGetSubscriptionInfo)
+	api.Get("/subscription/limit", middleware.RequireAuth(), subscription.HandleCheckURLLimit)
 
 	// Analytics routes (with auth)
 	api.Get("/analytics", middleware.RequireAuth(), analytics.GetUserAnalytics)
@@ -174,6 +183,11 @@ func main() {
 
 	// Start background cleanup jobs
 	jobs.StartCleanupScheduler()
+
+	// Start subscription renewal cron
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	subscription.StartRenewalCron(ctx)
 
 	app := fiber.New(fiber.Config{
 		EnableTrustedProxyCheck: true,
