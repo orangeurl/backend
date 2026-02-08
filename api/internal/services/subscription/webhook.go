@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -58,16 +60,30 @@ type DodoPaymentData struct {
 
 // HandleDodoWebhook handles incoming webhooks from DodoPayments
 func HandleDodoWebhook(c *fiber.Ctx) error {
-	// Verify webhook signature if secret is configured
+	// Log incoming webhook
+	log.Printf("[DodoWebhook] ========== NEW WEBHOOK RECEIVED ==========")
+	log.Printf("[DodoWebhook] Request from IP: %s", c.IP())
+	
+	// Svix signature verification
 	webhookSecret := os.Getenv("DODO_WEBHOOK_SECRET")
 	if webhookSecret != "" {
-		signature := c.Get("X-Dodo-Signature")
-		if !verifyWebhookSignature(c.Body(), signature, webhookSecret) {
-			log.Println("Webhook signature verification failed")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid signature",
-			})
+		webhookID := c.Get("webhook-id")
+		webhookTimestamp := c.Get("webhook-timestamp")
+		webhookSignature := c.Get("webhook-signature")
+		
+		if webhookID == "" || webhookTimestamp == "" || webhookSignature == "" {
+			log.Printf("[DodoWebhook] ⚠️ Missing Svix headers, skipping verification")
+		} else {
+			if !verifySvixSignature(c.Body(), webhookID, webhookTimestamp, webhookSignature, webhookSecret) {
+				log.Printf("[DodoWebhook] ❌ Signature verification failed")
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "Invalid signature",
+				})
+			}
+			log.Printf("[DodoWebhook] ✅ Signature verified successfully")
 		}
+	} else {
+		log.Printf("[DodoWebhook] ⚠️ DODO_WEBHOOK_SECRET not set, skipping verification")
 	}
 
 	var event DodoWebhookEvent
@@ -98,10 +114,69 @@ func HandleDodoWebhook(c *fiber.Ctx) error {
 }
 
 func verifyWebhookSignature(payload []byte, signature, secret string) bool {
+	// Dodo signature format: "v1,{base64_signature}" or just hex
+	sigToVerify := signature
+	
+	// Handle "v1,signature" format
+	if strings.HasPrefix(signature, "v1,") {
+		sigToVerify = strings.TrimPrefix(signature, "v1,")
+	}
+	
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(payload)
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(signature), []byte(expectedSig))
+	expectedMAC := mac.Sum(nil)
+	
+	// Try base64 decoding first
+	if decoded, err := base64.StdEncoding.DecodeString(sigToVerify); err == nil {
+		if hmac.Equal(decoded, expectedMAC) {
+			return true
+		}
+	}
+	
+	// Fallback to hex comparison
+	expectedHex := hex.EncodeToString(expectedMAC)
+	return hmac.Equal([]byte(sigToVerify), []byte(expectedHex))
+}
+
+// verifySvixSignature verifies webhook signatures using the Svix format
+// Svix signature: HMAC-SHA256 of "{webhook-id}.{webhook-timestamp}.{body}"
+// The secret may be prefixed with "whsec_" and is base64 encoded
+func verifySvixSignature(payload []byte, webhookID, timestamp, signature, secret string) bool {
+	// Remove "whsec_" prefix if present (Svix convention)
+	secretKey := secret
+	if strings.HasPrefix(secret, "whsec_") {
+		secretKey = strings.TrimPrefix(secret, "whsec_")
+	}
+	
+	// Decode base64 secret
+	decodedSecret, err := base64.StdEncoding.DecodeString(secretKey)
+	if err != nil {
+		// If decoding fails, try using the secret as-is
+		decodedSecret = []byte(secretKey)
+	}
+	
+	// Build the signed payload: "{id}.{timestamp}.{body}"
+	signedPayload := fmt.Sprintf("%s.%s.%s", webhookID, timestamp, string(payload))
+	
+	// Calculate HMAC-SHA256
+	mac := hmac.New(sha256.New, decodedSecret)
+	mac.Write([]byte(signedPayload))
+	expectedMAC := mac.Sum(nil)
+	expectedSig := base64.StdEncoding.EncodeToString(expectedMAC)
+	
+	// Parse the signature header - can have multiple signatures like "v1,sig1 v1,sig2"
+	signatures := strings.Split(signature, " ")
+	for _, sig := range signatures {
+		sig = strings.TrimSpace(sig)
+		if strings.HasPrefix(sig, "v1,") {
+			sigValue := strings.TrimPrefix(sig, "v1,")
+			if sigValue == expectedSig {
+				return true
+			}
+		}
+	}
+	
+	return false
 }
 
 // parseUserID parses the user ID string to uuid.UUID
