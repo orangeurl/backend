@@ -1,12 +1,14 @@
 package subscription
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -30,8 +32,14 @@ type DodoSubscriptionData struct {
 	BillingInterval    string `json:"billing_interval"` // "month" or "year"
 	CurrentPeriodStart string `json:"current_period_start"`
 	CurrentPeriodEnd   string `json:"current_period_end"`
+	NextBillingDate    string `json:"next_billing_date"`
+	PreviousBillingDate string `json:"previous_billing_date"`
+	PaymentFrequencyInterval string `json:"payment_frequency_interval"`
+	SubscriptionPeriodInterval string `json:"subscription_period_interval"`
 	Metadata           struct {
 		UserID string `json:"user_id"`
+		Plan   string `json:"plan"`
+		BillingInterval string `json:"billing_interval"`
 	} `json:"metadata"`
 }
 
@@ -97,8 +105,45 @@ func verifyWebhookSignature(payload []byte, signature, secret string) bool {
 }
 
 // parseUserID parses the user ID string to uuid.UUID
-func parseUserID(userIDStr string) (uuid.UUID, error) {
-	return uuid.Parse(userIDStr)
+func parseUserID(ctx context.Context, userIDStr string) (uuid.UUID, error) {
+	// Try UUID first
+	if id, err := uuid.Parse(userIDStr); err == nil {
+		return id, nil
+	}
+
+	// Fallback: treat as Clerk ID
+	queries := database.GetQueries()
+	user, err := queries.GetUserByClerkID(ctx, userIDStr)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return user.ID, nil
+}
+
+func normalizeInterval(interval string) string {
+	val := strings.ToLower(strings.TrimSpace(interval))
+	switch val {
+	case "month", "monthly":
+		return "month"
+	case "year", "yearly", "annual", "annually":
+		return "year"
+	default:
+		return val
+	}
+}
+
+func parsePeriodDates(subData DodoSubscriptionData) (time.Time, time.Time) {
+	// Prefer current period fields if present
+	if subData.CurrentPeriodStart != "" || subData.CurrentPeriodEnd != "" {
+		start, _ := time.Parse(time.RFC3339, subData.CurrentPeriodStart)
+		end, _ := time.Parse(time.RFC3339, subData.CurrentPeriodEnd)
+		return start, end
+	}
+
+	// Fallback to previous/next billing dates
+	start, _ := time.Parse(time.RFC3339, subData.PreviousBillingDate)
+	end, _ := time.Parse(time.RFC3339, subData.NextBillingDate)
+	return start, end
 }
 
 func handleSubscriptionActive(c *fiber.Ctx, data json.RawMessage) error {
@@ -114,19 +159,34 @@ func handleSubscriptionActive(c *fiber.Ctx, data json.RawMessage) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing user_id"})
 	}
 
-	userID, err := parseUserID(userIDStr)
+	userID, err := parseUserID(c.Context(), userIDStr)
 	if err != nil {
 		log.Printf("Invalid user_id format: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user_id format"})
 	}
 
 	// Parse dates
-	periodStart, _ := time.Parse(time.RFC3339, subData.CurrentPeriodStart)
-	periodEnd, _ := time.Parse(time.RFC3339, subData.CurrentPeriodEnd)
+	periodStart, periodEnd := parsePeriodDates(subData)
 
-	// Map product ID to plan
+	// Map product ID to plan (fallback to metadata plan)
 	planID := mapProductToPlan(subData.ProductID)
-	billingInterval := subData.BillingInterval
+	if planID == "" && subData.Metadata.Plan != "" {
+		planID = strings.ToLower(subData.Metadata.Plan)
+	}
+	if planID == "" {
+		planID = "pro"
+	}
+
+	billingInterval := normalizeInterval(subData.BillingInterval)
+	if billingInterval == "" {
+		billingInterval = normalizeInterval(subData.Metadata.BillingInterval)
+	}
+	if billingInterval == "" {
+		billingInterval = normalizeInterval(subData.PaymentFrequencyInterval)
+	}
+	if billingInterval == "" {
+		billingInterval = normalizeInterval(subData.SubscriptionPeriodInterval)
+	}
 	if billingInterval == "" {
 		billingInterval = "month"
 	}
@@ -183,15 +243,14 @@ func handleSubscriptionRenewed(c *fiber.Ctx, data json.RawMessage) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing user_id"})
 	}
 
-	userID, err := parseUserID(userIDStr)
+	userID, err := parseUserID(c.Context(), userIDStr)
 	if err != nil {
 		log.Printf("Invalid user_id format: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user_id format"})
 	}
 
 	// Parse dates
-	periodStart, _ := time.Parse(time.RFC3339, subData.CurrentPeriodStart)
-	periodEnd, _ := time.Parse(time.RFC3339, subData.CurrentPeriodEnd)
+	periodStart, periodEnd := parsePeriodDates(subData)
 
 	queries := database.GetQueries()
 
@@ -230,7 +289,7 @@ func handlePaymentFailed(c *fiber.Ctx, data json.RawMessage) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing user_id"})
 	}
 
-	userID, err := parseUserID(userIDStr)
+	userID, err := parseUserID(c.Context(), userIDStr)
 	if err != nil {
 		log.Printf("Invalid user_id format: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user_id format"})
@@ -282,7 +341,7 @@ func handleSubscriptionCancelled(c *fiber.Ctx, data json.RawMessage) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing user_id"})
 	}
 
-	userID, err := parseUserID(userIDStr)
+	userID, err := parseUserID(c.Context(), userIDStr)
 	if err != nil {
 		log.Printf("Invalid user_id format: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user_id format"})
@@ -325,7 +384,7 @@ func handleSubscriptionExpired(c *fiber.Ctx, data json.RawMessage) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing user_id"})
 	}
 
-	userID, err := parseUserID(userIDStr)
+	userID, err := parseUserID(c.Context(), userIDStr)
 	if err != nil {
 		log.Printf("Invalid user_id format: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user_id format"})
@@ -360,6 +419,7 @@ func mapProductToPlan(productID string) string {
 	productPlanMap := map[string]string{
 		"pdt_RoSmAEKfLT":      "pro",
 		"pdt_EAdypDoWVz":      "pro",
+		"pdt_U14gV50OuglMMHUnQpFAe": "pro",
 		"pdt_pro_monthly":     "pro",
 		"pdt_pro_yearly":      "pro",
 		"pdt_premium_monthly": "premium",
@@ -369,5 +429,5 @@ func mapProductToPlan(productID string) string {
 	if plan, ok := productPlanMap[productID]; ok {
 		return plan
 	}
-	return "pro" // Default to pro
+	return ""
 }
