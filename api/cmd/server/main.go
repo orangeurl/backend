@@ -144,6 +144,10 @@ func setupRoutes(app *fiber.App) {
 	api.Get("/admin/blocked", middleware.RequireAuth(), middleware.AdminAuditLog(), admin.ListBlockedURLs)
 	api.Get("/admin/blocked/:shortId", middleware.RequireAuth(), admin.IsURLBlocked)
 
+	// Admin URL management (requires JWT auth + admin role)
+	api.Get("/admin/urls", middleware.RequireAuth(), middleware.AdminAuditLog(), admin.AdminListAllURLs)
+	api.Delete("/admin/urls/:id", middleware.RequireAuth(), middleware.AdminAuditLog(), admin.AdminHardDeleteURL)
+
 	// Public API (v1) - Requires API Key + Rate Limiting
 	apiV1 := app.Group("/api/v1", middleware.RequireAPIKey(), middleware.APIRateLimit())
 

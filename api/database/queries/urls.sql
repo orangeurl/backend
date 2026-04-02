@@ -100,3 +100,22 @@ ORDER BY u.created_at DESC;
 -- name: DeactivateURLByShortID :exec
 -- Admin: Deactivate a URL by short_id (used when blocking abusive URLs)
 UPDATE urls SET is_active = FALSE, updated_at = NOW() WHERE short_id = $1;
+
+-- name: AdminGetAllURLs :many
+-- Admin: Get all URLs (including inactive) for admin management panel
+SELECT u.*, COALESCE(usr.email, '') as owner_email
+FROM urls u
+LEFT JOIN users usr ON u.user_id = usr.id
+ORDER BY u.created_at DESC;
+
+-- name: AdminHardDeleteURL :exec
+-- Admin: Permanently delete a URL record from the database
+DELETE FROM urls WHERE id = $1;
+
+-- name: AdminDeleteURLClicks :exec
+-- Admin: Delete all click analytics for a URL before hard-deleting it
+DELETE FROM url_clicks WHERE url_id = $1;
+
+-- name: AdminGetURLByID :one
+-- Admin: Get any URL by ID (including inactive ones, no user filter)
+SELECT * FROM urls WHERE id = $1;
