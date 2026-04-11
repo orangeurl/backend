@@ -185,6 +185,16 @@ type User struct {
 	CreatedAt        sql.NullTime   `json:"created_at"`
 	UpdatedAt        sql.NullTime   `json:"updated_at"`
 	IsAdmin          sql.NullBool   `json:"is_admin"`
+	IsBanned         sql.NullBool   `json:"is_banned"`
+}
+
+type BlockedDomain struct {
+	ID                uuid.UUID     `json:"id"`
+	Domain            string        `json:"domain"`
+	IncludeSubdomains bool          `json:"include_subdomains"`
+	BlockReason       string        `json:"block_reason"`
+	BlockedBy         uuid.NullUUID `json:"blocked_by"`
+	CreatedAt         sql.NullTime  `json:"created_at"`
 }
 
 type Waitlist struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	neturl "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -176,6 +177,15 @@ func ShortenURL(c *fiber.Ctx) error {
 		})
 	}
 
+	// Check if user is banned
+	if userErr == nil && user.IsBanned.Valid && user.IsBanned.Bool {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "Account banned",
+			"message": "Your account has been banned. Contact support if you believe this is a mistake.",
+			"code":    "USER_BANNED",
+		})
+	}
+
 	// Validate URL protocol first (block javascript:, data:, etc.)
 	if err := url.ValidateURLProtocol(body.URL); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Only http and https URLs are allowed"})
@@ -185,9 +195,35 @@ func ShortenURL(c *fiber.Ctx) error {
 	if isSuspicious, reason := url.IsSuspiciousDomain(body.URL); isSuspicious {
 		log.Printf("[ShortenURL] ⚠️ Blocked suspicious domain: %s - Reason: %s", body.URL, reason)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "This domain is not allowed due to abuse concerns",
+			"error":  "This domain is not allowed due to abuse concerns",
 			"reason": reason,
 		})
+	}
+
+	// Check against admin-blocked domains from database
+	if queries := database.GetQueries(); queries != nil {
+		blockedDomains, dbErr := queries.ListBlockedDomains(c.Context())
+		if dbErr == nil && len(blockedDomains) > 0 {
+			parsedURL, parseErr := neturl.Parse(body.URL)
+			if parseErr == nil {
+				hostname := strings.ToLower(parsedURL.Hostname())
+				for _, bd := range blockedDomains {
+					blocked := false
+					if hostname == bd.Domain {
+						blocked = true
+					} else if bd.IncludeSubdomains && strings.HasSuffix(hostname, "."+bd.Domain) {
+						blocked = true
+					}
+					if blocked {
+						log.Printf("[ShortenURL] Blocked by admin domain rule: %s matches %s", hostname, bd.Domain)
+						return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+							"error":  "This domain is not allowed",
+							"reason": bd.BlockReason,
+						})
+					}
+				}
+			}
+		}
 	}
 
 	// checking if the url is an actual url
