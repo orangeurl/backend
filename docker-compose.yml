@@ -7,6 +7,9 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
     depends_on:
       - api
+    networks:
+      - default
+      - orangeurl
     restart: unless-stopped
 
   api:
@@ -70,4 +73,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
- 
+
+networks:
+  orangeurl:
+    external: true
+
